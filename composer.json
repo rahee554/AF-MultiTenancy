@@ -1,0 +1,42 @@
+{
+    "name": "artflow-studio/tenancy",
+    "description": "A comprehensive multi-tenant Laravel package with admin dashboard and domain management. Optimized for performance with proper stancl/tenancy integration.",
+    "version": "0.4.6",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Artflow Studio",
+            "email": "info@artflow-studio.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "php": "^8.0",
+        "illuminate/support": "*",
+        "stancl/tenancy": "^3.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ArtflowStudio\\Tenancy\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ArtflowStudio\\Tenancy\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ArtflowStudio\\Tenancy\\TenancyServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
