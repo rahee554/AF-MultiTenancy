@@ -4,7 +4,7 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![License](https://img.shields.io/packagist/l/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 
-**Version: 0.1.0 Beta**
+**Version: 0.3.0**
 
 A comprehensive, production-ready multi-tenant Laravel package with admin dashboard, API endpoints, and domain management. Built on top of `stancl/tenancy` with additional enterprise features and zero-configuration setup.
 
@@ -147,17 +147,153 @@ This creates:
 - `domains` table (for domain management)
 - Required indexes and foreign keys
 
-### Step 5: Optional Publications
+---
+
+## 🔌 API Endpoints Reference
+
+### Core CRUD Operations
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/tenants` | GET | List all tenants with pagination | `?page=1&per_page=15&search=term&status=active&sort=name&order=asc` |
+| `/tenancy/tenants/create` | POST | Create new tenant | `name, domain, status, database_name, notes, run_migrations` |
+| `/tenancy/tenants/{uuid}` | GET | Get tenant details | UUID in URL path |
+| `/tenancy/tenants/{uuid}` | PUT | Update tenant information | `name, status, notes` |
+| `/tenancy/tenants/{uuid}` | DELETE | Delete tenant and database | UUID in URL path |
+
+### Tenant Management
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/tenants/{uuid}/status` | PUT | Update tenant status | `status: active\|suspended\|blocked\|inactive` |
+| `/tenancy/tenants/{uuid}/block` | POST | Block tenant access | UUID in URL path |
+| `/tenancy/tenants/{uuid}/reset` | POST | Reset tenant database | `confirm: true` |
+| `/tenancy/bulk-status-update` | PUT | Update multiple tenant statuses | `tenant_uuids: [], status: string` |
+
+### Domain Management
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/tenants/{uuid}/domains` | GET | Get tenant domains | UUID in URL path |
+| `/tenancy/tenants/{uuid}/domains/create` | POST | Add domain to tenant | `domain: string, is_primary: boolean` |
+| `/tenancy/tenants/{uuid}/domains/{domainId}` | DELETE | Remove domain from tenant | UUID and domainId in URL path |
+
+### Database Operations
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/tenants/{uuid}/migrate` | POST | Run migrations for tenant | `fresh: boolean, seed: boolean` |
+| `/tenancy/tenants/{uuid}/seed` | POST | Seed tenant database | `class: string (optional)` |
+| `/tenancy/migrate-all-tenants` | POST | Migrate all tenant databases | `fresh: boolean, seed: boolean` |
+| `/tenancy/seed-all-tenants` | POST | Seed all tenant databases | `class: string (optional)` |
+
+### System Monitoring
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/dashboard` | GET | System dashboard data | None |
+| `/tenancy/stats` | GET | System statistics | None |
+| `/tenancy/live-stats` | GET | Real-time statistics | None |
+| `/tenancy/health` | GET | System health status | None |
+| `/tenancy/performance` | GET | Performance metrics | `period: hour\|day\|week\|month` |
+| `/tenancy/connection-stats` | GET | Database connection stats | None |
+| `/tenancy/active-users` | GET | Active users across tenants | None |
+
+### System Operations
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/clear-cache` | POST | Clear system cache | `keys: [] (optional)` |
+| `/tenancy/clear-all-caches` | POST | Clear all caches | None |
+| `/tenancy/system-info` | GET | System information | None |
+| `/tenancy/maintenance/on` | POST | Enable maintenance mode | `message: string (optional)` |
+| `/tenancy/maintenance/off` | POST | Disable maintenance mode | None |
+
+### Backup & Restore
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/tenants/{uuid}/backup` | POST | Backup tenant database | `include_data: boolean, compression: boolean` |
+| `/tenancy/tenants/{uuid}/restore` | POST | Restore tenant from backup | `backup_file: file, confirm: true` |
+| `/tenancy/tenants/{uuid}/export` | POST | Export tenant data | `format: json\|csv\|sql, tables: []` |
+| `/tenancy/import-tenant` | POST | Import tenant data | `import_file: file, name: string, domain: string` |
+
+### Analytics & Reports
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/analytics/overview` | GET | Analytics overview | `period: day\|week\|month\|year` |
+| `/tenancy/analytics/usage` | GET | Usage analytics | `tenant_uuid: string (optional)` |
+| `/tenancy/analytics/performance` | GET | Performance analytics | `metric: cpu\|memory\|disk\|queries` |
+| `/tenancy/analytics/growth` | GET | Growth analytics | `period: day\|week\|month\|year` |
+| `/tenancy/reports/tenants` | GET | Tenants report | `format: json\|csv\|pdf, filters: {}` |
+| `/tenancy/reports/system` | GET | System report | `format: json\|csv\|pdf, sections: []` |
+
+### Webhooks
+| Endpoint | Method | Purpose | Parameters |
+|----------|--------|---------|------------|
+| `/tenancy/webhooks/tenant-created` | POST | Tenant creation webhook | Webhook payload |
+| `/tenancy/webhooks/tenant-updated` | POST | Tenant update webhook | Webhook payload |
+| `/tenancy/webhooks/tenant-deleted` | POST | Tenant deletion webhook | Webhook payload |
+
+---
+
+## 🛠️ Artisan Commands Reference
+
+### Primary Tenant Management Command
+
+The package provides a comprehensive `tenant:manage` command with multiple actions:
 
 ```bash
-# Publish routes for customization
-php artisan vendor:publish --tag=tenancy-routes
+php artisan tenant:manage {action} [options]
+```
 
-# Publish views for UI customization  
-php artisan vendor:publish --tag=tenancy-views
+### Available Actions
+| Command | Purpose |
+|---------|---------|
+| `tenant:manage create` | Create new tenant interactively |
+| `tenant:manage list` | List all tenants in table format |
+| `tenant:manage delete` | Delete tenant and database |
+| `tenant:manage activate` | Activate suspended tenant |
+| `tenant:manage deactivate` | Deactivate active tenant |
+| `tenant:manage migrate` | Run migrations for specific tenant |
+| `tenant:manage migrate-all` | Run migrations for all tenants |
+| `tenant:manage seed` | Seed specific tenant database |
+| `tenant:manage seed-all` | Seed all tenant databases |
+| `tenant:manage status` | Show detailed tenant status |
+| `tenant:manage health` | Check system health |
 
-# Publish migrations for modification
-php artisan vendor:publish --tag=tenancy-migrations
+### Command Options
+| Option | Description |
+|--------|-------------|
+| `--tenant=UUID` | Target specific tenant by UUID |
+| `--name=NAME` | Set tenant name (create) |
+| `--domain=DOMAIN` | Set tenant domain (create) |
+| `--database=NAME` | Custom database name (create) |
+| `--status=STATUS` | Set tenant status (create) |
+| `--notes=TEXT` | Add tenant notes (create) |
+| `--force` | Skip confirmation prompts |
+| `--seed` | Run seeders after migration |
+| `--fresh` | Drop tables before migrating |
+
+### Usage Examples
+
+```bash
+# Create new tenant
+php artisan tenant:manage create --name="Acme Corp" --domain="acme.local"
+
+# List all tenants
+php artisan tenant:manage list
+
+# Migrate specific tenant
+php artisan tenant:manage migrate --tenant=abc-123-def
+
+# Migrate all tenants with fresh install
+php artisan tenant:manage migrate-all --fresh --seed
+
+# Check tenant status
+php artisan tenant:manage status --tenant=abc-123-def
+
+# System health check
+php artisan tenant:manage health
+
+# Delete tenant (with confirmation)
+php artisan tenant:manage delete --tenant=abc-123-def
+
+# Force delete without confirmation
+php artisan tenant:manage delete --tenant=abc-123-def --force
 ```
 
 ---
@@ -268,14 +404,15 @@ packages/artflow-studio/tenancy/
 
 #### Via API
 ```bash
-curl -X POST "http://your-domain.com/tenancy/tenants" \
+curl -X POST "http://your-domain.com/tenancy/tenants/create" \
   -H "X-API-Key: your-api-key" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Acme Corporation",
     "domain": "acme.yourdomain.com",
     "status": "active",
-    "run_migrations": true
+    "run_migrations": true,
+    "notes": "New enterprise client"
   }'
 ```
 
@@ -362,24 +499,43 @@ class DashboardController extends Controller
 
 ### Authentication
 
-All API endpoints require authentication via:
+All API endpoints require authentication via the `X-API-Key` header with proper middleware enforcement:
 
-**Header Authentication:**
+**API Key Authentication (Required):**
 ```bash
-# API Key
-X-API-Key: your-api-key
-
-# Bearer Token  
-Authorization: Bearer your-token
+curl -X GET "http://your-domain.com/tenancy/tenants" \
+  -H "X-API-Key: sk_tenant_live_your_secure_api_key_here"
 ```
 
 **Environment Variables:**
 ```env
-TENANT_API_KEY=your-secure-api-key
-TENANCY_BEARER_TOKEN=your-bearer-token
-TENANCY_API_NO_AUTH=false          # Set true to disable auth (dev only)
-TENANCY_API_ALLOW_LOCALHOST=true   # Allow localhost without auth
+# Required API key for production and development
+TENANT_API_KEY=sk_tenant_live_your_secure_api_key_here
 ```
+
+**Security Features:**
+- ✅ **Middleware-enforced authentication** - All API routes protected by `tenancy.api` middleware
+- ✅ **Rate limiting** - Built-in throttling via `throttle:api`
+- ✅ **Development mode** - Localhost allowed without API key if none configured
+- ✅ **Production mode** - API key always required in production environments
+- ✅ **Consistent error responses** - Standardized 401 responses for unauthorized access
+
+**Error Responses:**
+```json
+{
+  "success": false,
+  "error": "Unauthorized",
+  "message": "Invalid or missing API key. Please include X-API-Key header.",
+  "code": 401,
+  "timestamp": "2025-08-01T14:30:00Z"
+}
+```
+
+**Security Notes:**
+- API key validation happens at the middleware level before reaching controllers
+- No API key bypass in production environments
+- Development environments (localhost) can work without API key for testing
+- All routes under `/tenancy/*` are automatically protected
 
 ### Tenant Management Endpoints
 
@@ -389,9 +545,17 @@ GET /tenancy/tenants
 ```
 
 **Query Parameters:**
-- `per_page` (int): Items per page (default: 15)
-- `search` (string): Search by name or domain
+- `page` (int): Page number for pagination (default: 1)
+- `per_page` (int): Items per page (default: 15, max: 100)
+- `search` (string): Search by tenant name or domain
 - `status` (string): Filter by status (active, suspended, blocked, inactive)
+- `sort` (string): Sort field (name, created_at, status)
+- `order` (string): Sort order (asc, desc)
+
+**Example Request:**
+```bash
+GET /tenancy/tenants?page=1&per_page=20&search=acme&status=active&sort=created_at&order=desc
+```
 
 **Response:**
 ```json
@@ -426,7 +590,7 @@ GET /tenancy/tenants
 
 #### Create Tenant
 ```bash
-POST /tenancy/tenants
+POST /tenancy/tenants/create
 ```
 
 **Request Body:**
@@ -435,9 +599,21 @@ POST /tenancy/tenants
   "name": "Acme Corporation",
   "domain": "acme.yourdomain.com",
   "status": "active",
+  "database_name": "custom_db_name",
+  "notes": "Customer notes here",
   "run_migrations": true
 }
 ```
+
+**Required Fields:**
+- `name` (string): Tenant display name
+- `domain` (string): Primary domain for tenant
+
+**Optional Fields:**
+- `status` (string): active|suspended|blocked|inactive (default: active)
+- `database_name` (string): Custom database name (auto-generated if not provided)
+- `notes` (string): Additional notes
+- `run_migrations` (boolean): Run migrations after creation (default: false)
 
 **Response:**
 ```json
@@ -480,13 +656,49 @@ DELETE /tenancy/tenants/{uuid}
 
 #### Update Tenant Status
 ```bash
-POST /tenancy/tenants/{uuid}/status
+PUT /tenancy/tenants/{uuid}/status
 ```
 
 **Request Body:**
 ```json
 {
-  "status": "suspended"
+  "status": "suspended",
+  "reason": "Payment overdue",
+  "notify": true
+}
+```
+
+**Available Statuses:**
+- `active`: Tenant fully operational
+- `suspended`: Temporary access restriction
+- `blocked`: Permanent access restriction
+- `inactive`: Tenant disabled but data preserved
+
+#### Add Domain to Tenant
+```bash
+POST /tenancy/tenants/{uuid}/domains/create
+```
+
+**Request Body:**
+```json
+{
+  "domain": "subdomain.yourdomain.com",
+  "is_primary": false,
+  "ssl_enabled": true
+}
+```
+
+#### Migrate Tenant Database
+```bash
+POST /tenancy/tenants/{uuid}/migrate
+```
+
+**Request Body:**
+```json
+{
+  "fresh": false,
+  "seed": true,
+  "timeout": 300
 }
 ```
 
@@ -636,43 +848,12 @@ Update configuration:
 
 ---
 
-## 🔧 Advanced Configuration
+## 🔧 Performance Optimization
 
-### Production Domain Setup
-
-#### Nginx Configuration
-```nginx
-server {
-    listen 80;
-    server_name *.yourdomain.com yourdomain.com;
-    root /path/to/your/laravel/public;
-    
-    index index.php;
-    
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-    
-    location ~ \.php$ {
-        include fastcgi_params;
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-    }
-}
-```
-
-#### Apache Configuration
-```apache
-<VirtualHost *:80>
-    ServerName yourdomain.com
-    ServerAlias *.yourdomain.com
-    DocumentRoot /path/to/your/laravel/public
-    
-    <Directory /path/to/your/laravel/public>
-        AllowOverride All
-        Require all granted
-    </Directory>
-</VirtualHost>
+### Redis Caching
+```php
+// config/cache.php
+'default' => env('CACHE_DRIVER', 'redis'),
 ```
 
 ### Queue Configuration
@@ -680,34 +861,8 @@ server {
 For better performance with bulk operations:
 
 ```bash
-# Install Redis
-sudo apt-get install redis-server
-
 # Start queue worker
 php artisan queue:work redis --sleep=3 --tries=3 --timeout=60
-```
-
-### Performance Optimization
-
-#### Redis Caching
-```php
-// config/cache.php
-'default' => env('CACHE_DRIVER', 'redis'),
-```
-
-#### Database Connection Pooling
-```php
-// config/database.php
-'tenant' => [
-    'driver' => 'mysql',
-    'options' => [
-        PDO::ATTR_PERSISTENT => true,
-    ],
-    'pool' => [
-        'min_connections' => 1,
-        'max_connections' => 10,
-    ],
-],
 ```
 
 ---
@@ -827,41 +982,31 @@ This package is open-sourced software licensed under the [MIT license](LICENSE).
 
 ## 📈 Changelog
 
-### v0.1.0 (Beta) - 2025-07-31
+### v0.3.0 - 2025-08-01
 
-**Initial Release**
+**Current Release**
+- ✅ Fixed API key authentication with proper middleware
+- ✅ Enhanced security with `tenancy.api` middleware
+- ✅ Proper API rate limiting and throttling
+- ✅ Localhost development mode support
+- ✅ Production-ready API key enforcement
+- ✅ Comprehensive error responses for unauthorized access
+- ✅ Auto-registered API authentication middleware
+
+### v0.2.0 - 2025-08-01
+
+**Previous Release**
 - ✅ Complete multi-tenant Laravel package
 - ✅ Admin dashboard with Metronic UI
-- ✅ Full RESTful API
+- ✅ Full RESTful API with 30+ endpoints
+- ✅ Comprehensive Artisan commands
 - ✅ Auto-discovery and zero-config setup
 - ✅ Enhanced tenant and domain models
 - ✅ Unified middleware for tenancy
 - ✅ Real-time monitoring and statistics
 - ✅ Production-ready error handling
-- ✅ Comprehensive documentation
-
-**Known Issues (Beta)**
-- Performance optimization ongoing
-- Additional customization options coming
-- More advanced monitoring features planned
-
----
-
-## 🚀 Roadmap
-
-### v0.2.0 (Coming Soon)
-- Advanced caching strategies
-- Multi-database support (PostgreSQL, SQLite)
-- Enhanced API rate limiting
-- Webhook support for tenant events
-- Advanced analytics dashboard
-
-### v0.3.0 (Planned)
-- Tenant billing integration
-- Advanced user management
-- Custom middleware pipeline
-- CLI installation wizard
-- Performance benchmarking tools
+- ✅ Backup and restore functionality
+- ✅ Analytics and reporting
 
 ---
 
@@ -869,7 +1014,6 @@ This package is open-sourced software licensed under the [MIT license](LICENSE).
 
 - 📖 Read the docs above
 - 🐛 [Report issues](https://github.com/artflow-studio/tenancy/issues)
-- 💬 Join our [Discord community](https://discord.gg/artflow-studio)
 - 📧 Email: support@artflow-studio.com
 
 **Happy multi-tenanting!** 🎉

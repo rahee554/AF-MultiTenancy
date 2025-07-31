@@ -79,11 +79,11 @@ Route::middleware(['web', 'tenant', 'auth'])->group(function () {
 // API ROUTES (External Integration)
 // ========================================
 
-// Public API routes (protected by API key)
-Route::prefix('tenancy')->name('tenancy.')->group(function () {
+// Protected API routes (require TENANT_API_KEY via X-API-Key header)
+Route::middleware(['tenancy.api'])->prefix('tenancy')->name('tenancy.')->group(function () {
     // Core CRUD Operations
     Route::get('/tenants', [TenantApiController::class, 'apiIndex'])->name('api.tenants.index');
-    Route::post('/tenants', [TenantApiController::class, 'apiStore'])->name('api.tenants.store');
+    Route::post('/tenants/create', [TenantApiController::class, 'apiStore'])->name('api.tenants.store');
     Route::get('/tenants/{uuid}', [TenantApiController::class, 'apiShow'])->name('api.tenants.show');
     Route::put('/tenants/{uuid}', [TenantApiController::class, 'apiUpdate'])->name('api.tenants.update');
     Route::delete('/tenants/{uuid}', [TenantApiController::class, 'apiDestroy'])->name('api.tenants.destroy');
@@ -103,9 +103,9 @@ Route::prefix('tenancy')->name('tenancy.')->group(function () {
     Route::post('/tenants/{uuid}/reset', [TenantApiController::class, 'apiReset'])->name('api.tenants.reset');
 
     // Domain Management
-    Route::get('/tenants/{uuid}/domains', [TenantApiController::class, 'apiGetDomains'])->name('api.tenants.domains');
-    Route::post('/tenants/{uuid}/domains', [TenantApiController::class, 'apiAddDomain'])->name('api.tenants.domains.add');
-    Route::delete('/domains/{domainId}', [TenantApiController::class, 'apiRemoveDomain'])->name('api.domains.remove');
+    Route::get('/tenants/{uuid}/domains', [TenantApiController::class, 'apiGetDomains'])->name('api.tenants.domains.list');
+    Route::post('/tenants/{uuid}/domains/create', [TenantApiController::class, 'apiAddDomain'])->name('api.tenants.domains.create');
+    Route::delete('/tenants/{uuid}/domains/{domainId}', [TenantApiController::class, 'apiRemoveDomain'])->name('api.tenants.domains.delete');
 
     // Database Operations
     Route::post('/tenants/{uuid}/migrate', [TenantApiController::class, 'apiMigrate'])->name('api.tenants.migrate');

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use ArtflowStudio\Tenancy\Services\TenantService;
 use ArtflowStudio\Tenancy\Commands\TenantCommand;
 use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -58,12 +59,19 @@ class TenancyServiceProvider extends ServiceProvider
     {
         $router = $this->app['router'];
         
-        // Register middleware alias
+        // Register middleware aliases
         $router->aliasMiddleware('tenant', TenantMiddleware::class);
+        $router->aliasMiddleware('tenancy.api', ApiAuthMiddleware::class);
         
         // Register middleware group for easy use
         $router->middlewareGroup('tenant', [
             TenantMiddleware::class,
+        ]);
+        
+        // Register API middleware group
+        $router->middlewareGroup('tenancy.api', [
+            'throttle:api',
+            ApiAuthMiddleware::class,
         ]);
     }
 
