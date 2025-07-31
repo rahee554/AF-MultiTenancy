@@ -3,7 +3,7 @@
 namespace ArtflowStudio\Tenancy\Services;
 
 use ArtflowStudio\Tenancy\Models\Tenant;
-use App\Models\Domain;
+use ArtflowStudio\Tenancy\Models\Domain;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;

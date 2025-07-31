@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Middleware;
+namespace ArtflowStudio\Tenancy\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;

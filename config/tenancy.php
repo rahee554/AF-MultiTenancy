@@ -126,4 +126,64 @@ return [
         'suspended' => 'tenancy::errors.tenant-suspended',
         'inactive' => 'tenancy::errors.tenant-inactive',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | API Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the Tenancy API endpoints.
+    |
+    */
+
+    'api' => [
+        // API Key for X-API-Key header authentication
+        'api_key' => env('TENANCY_API_KEY'),
+        
+        // Bearer token for Authorization: Bearer {token} authentication
+        'bearer_token' => env('TENANCY_BEARER_TOKEN'),
+        
+        // Disable all API authentication (for development/internal use)
+        'no_auth' => env('TENANCY_API_NO_AUTH', false),
+        
+        // Allow localhost requests without authentication
+        'allow_localhost' => env('TENANCY_API_ALLOW_LOCALHOST', true),
+        
+        // Rate limiting
+        'rate_limit' => [
+            'enabled' => env('TENANCY_API_RATE_LIMIT', true),
+            'max_attempts' => env('TENANCY_API_RATE_LIMIT_ATTEMPTS', 60),
+            'decay_minutes' => env('TENANCY_API_RATE_LIMIT_DECAY', 1),
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Monitoring Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for system monitoring and metrics.
+    |
+    */
+
+    'monitoring' => [
+        'enabled' => env('TENANCY_MONITORING_ENABLED', true),
+        'metrics_retention_days' => env('TENANCY_METRICS_RETENTION_DAYS', 30),
+        'performance_tracking' => env('TENANCY_PERFORMANCE_TRACKING', true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Backup Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for tenant backup functionality.
+    |
+    */
+
+    'backup' => [
+        'enabled' => env('TENANCY_BACKUP_ENABLED', false),
+        'storage_disk' => env('TENANCY_BACKUP_DISK', 'local'),
+        'retention_days' => env('TENANCY_BACKUP_RETENTION_DAYS', 7),
+    ],
 ];
