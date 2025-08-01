@@ -226,6 +226,20 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
+     * Override the database method from HasDatabase to use our custom database name.
+     */
+    public function database(): \Stancl\Tenancy\DatabaseConfig
+    {
+        // Let the HasDatabase trait handle the logic, but override the database name
+        $config = parent::database();
+        
+        // Override with our custom database name
+        $config->name = $this->getDatabaseName();
+        
+        return $config;
+    }
+
+    /**
      * Check if tenant is active.
      */
     public function isActive(): bool

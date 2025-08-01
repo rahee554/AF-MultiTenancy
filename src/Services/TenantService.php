@@ -90,24 +90,20 @@ class TenantService
      */
     public function migrateTenant(Tenant $tenant, bool $fresh = false): void
     {
-        // Configure the tenant database connection dynamically
-        config(['database.connections.tenant.database' => $tenant->getDatabaseName()]);
-        DB::purge('tenant');
-        DB::reconnect('tenant');
-
-        Tenancy::initialize($tenant);
+        // Use stancl/tenancy's proper database switching
+        tenancy()->initialize($tenant);
 
         try {
             $command = $fresh ? 'migrate:fresh' : 'migrate';
             
-            // Run tenant-specific migrations only
+            // Run tenant-specific migrations using stancl's connection
             Artisan::call($command, [
-                '--database' => 'tenant',
+                '--database' => 'tenant', // stancl uses 'tenant' connection automatically
                 '--path' => 'database/migrations/tenant',
                 '--force' => true,
             ]);
         } finally {
-            Tenancy::end();
+            tenancy()->end();
         }
     }
 
@@ -116,20 +112,16 @@ class TenantService
      */
     public function seedTenant(Tenant $tenant): void
     {
-        // Configure the tenant database connection dynamically
-        config(['database.connections.tenant.database' => $tenant->getDatabaseName()]);
-        DB::purge('tenant');
-        DB::reconnect('tenant');
-
-        Tenancy::initialize($tenant);
+        // Use stancl/tenancy's proper database switching
+        tenancy()->initialize($tenant);
 
         try {
             Artisan::call('db:seed', [
                 '--force' => true,
-                '--database' => 'tenant',
+                '--database' => 'tenant', // stancl uses 'tenant' connection automatically
             ]);
         } finally {
-            Tenancy::end();
+            tenancy()->end();
         }
     }
 
@@ -385,16 +377,14 @@ class TenantService
      */
     private function createTenantDatabase(string $databaseName): void
     {
-        $connection = config('tenancy.database.connection') ?: config('database.default');
-        $config = config("database.connections.{$connection}");
-
-        $pdo = new \PDO(
-            "mysql:host={$config['host']};port={$config['port']}",
-            $config['username'],
-            $config['password']
-        );
-
-        $pdo->exec("CREATE DATABASE IF NOT EXISTS `{$databaseName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+        // Use stancl/tenancy's database manager for proper database creation
+        $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
+        
+        // Create a mock tenant object for database creation
+        $mockTenant = new Tenant(['id' => 'temp']);
+        $mockTenant->database_name = $databaseName;
+        
+        $databaseManager->createDatabase($mockTenant);
     }
 
     /**
@@ -402,16 +392,14 @@ class TenantService
      */
     private function dropTenantDatabase(string $databaseName): void
     {
-        $connection = config('tenancy.database.connection') ?: config('database.default');
-        $config = config("database.connections.{$connection}");
-
-        $pdo = new \PDO(
-            "mysql:host={$config['host']};port={$config['port']}",
-            $config['username'],
-            $config['password']
-        );
-
-        $pdo->exec("DROP DATABASE IF EXISTS `{$databaseName}`");
+        // Use stancl/tenancy's database manager for proper database deletion
+        $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
+        
+        // Create a mock tenant object for database deletion
+        $mockTenant = new Tenant(['id' => 'temp']);
+        $mockTenant->database_name = $databaseName;
+        
+        $databaseManager->deleteDatabase($mockTenant);
     }
 
     /**
@@ -420,17 +408,13 @@ class TenantService
     private function checkTenantDatabase(string $databaseName): bool
     {
         try {
-            $connection = config('tenancy.database.connection') ?: config('database.default');
-            $config = config("database.connections.{$connection}");
-
-            $pdo = new \PDO(
-                "mysql:host={$config['host']};port={$config['port']}",
-                $config['username'],
-                $config['password']
-            );
-
-            $result = $pdo->query("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = '{$databaseName}'");
-            return $result->rowCount() > 0;
+            $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
+            
+            // Create a mock tenant object for database checking
+            $mockTenant = new Tenant(['id' => 'temp']);
+            $mockTenant->database_name = $databaseName;
+            
+            return $databaseManager->databaseExists($mockTenant);
         } catch (\Exception $e) {
             return false;
         }

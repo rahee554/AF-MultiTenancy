@@ -6,6 +6,8 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Route;
 use ArtflowStudio\Tenancy\Services\TenantService;
 use ArtflowStudio\Tenancy\Commands\TenantCommand;
+use ArtflowStudio\Tenancy\Commands\CreateTestTenantsCommand;
+use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
 use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 
@@ -16,13 +18,16 @@ class TenancyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Register stancl/tenancy configuration first
+        $this->mergeConfigFrom(__DIR__ . '/../config/stancl-tenancy.php', 'tenancy');
+        
         // Bind TenantService
         $this->app->singleton(TenantService::class, function ($app) {
             return new TenantService();
         });
 
-        // Register separate artflow config (don't merge with stancl/tenancy)
-        $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
+        // Merge package config with stancl/tenancy config
+        $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'artflow-tenancy');
     }
 
     /**
@@ -48,22 +53,8 @@ class TenancyServiceProvider extends ServiceProvider
         // Register publishables
         $this->registerPublishables();
 
-        // Auto-setup stancl/tenancy integration
-        $this->configureStanclIntegration();
-
         // Auto-publish and migrate on package install
         $this->autoSetup();
-    }
-
-    /**
-     * Configure proper stancl/tenancy integration
-     */
-    protected function configureStanclIntegration(): void
-    {
-        // Ensure stancl/tenancy uses our enhanced Tenant model
-        config([
-            'tenancy.tenant_model' => \ArtflowStudio\Tenancy\Models\Tenant::class,
-        ]);
     }
 
     /**
@@ -77,8 +68,9 @@ class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('tenant', TenantMiddleware::class);
         $router->aliasMiddleware('tenancy.api', ApiAuthMiddleware::class);
         
-        // Register middleware group for easy use
+        // Register middleware group for tenant routes
         $router->middlewareGroup('tenant', [
+            \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
             TenantMiddleware::class,
         ]);
         
@@ -110,6 +102,8 @@ class TenancyServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->commands([
                 TenantCommand::class,
+                CreateTestTenantsCommand::class,
+                TestPerformanceCommand::class,
             ]);
         }
     }
@@ -120,14 +114,19 @@ class TenancyServiceProvider extends ServiceProvider
     protected function registerPublishables(): void
     {
         if ($this->app->runningInConsole()) {
+            // Publish stancl/tenancy config (required for proper integration)
+            $this->publishes([
+                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
+            ], 'tenancy-stancl-config');
+
             // Publish tenancy routes (recommended for customization)
             $this->publishes([
                 __DIR__ . '/../routes/tenancy.php' => base_path('routes/tenancy.php'),
             ], 'tenancy-routes');
 
-            // Publish tenancy config (required)
+            // Publish artflow tenancy config (optional)
             $this->publishes([
-                __DIR__ . '/../config/tenancy.php' => config_path('tenancy.php'),
+                __DIR__ . '/../config/tenancy.php' => config_path('artflow-tenancy.php'),
             ], 'tenancy-config');
 
             // Publish views (optional - for dashboard customization)
@@ -142,8 +141,9 @@ class TenancyServiceProvider extends ServiceProvider
 
             // Publish all assets at once
             $this->publishes([
+                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
+                __DIR__ . '/../config/tenancy.php' => config_path('artflow-tenancy.php'),
                 __DIR__ . '/../routes/tenancy.php' => base_path('routes/tenancy.php'),
-                __DIR__ . '/../config/tenancy.php' => config_path('tenancy.php'),
             ], 'tenancy');
         }
     }
@@ -154,10 +154,10 @@ class TenancyServiceProvider extends ServiceProvider
     protected function autoSetup(): void
     {
         if ($this->app->runningInConsole() && !config('tenancy')) {
-            // Auto-publish critical configuration if not already published
+            // Auto-publish critical stancl/tenancy configuration if not already published
             if (!file_exists(config_path('tenancy.php'))) {
                 \Illuminate\Support\Facades\Artisan::call('vendor:publish', [
-                    '--tag' => 'tenancy-config',
+                    '--tag' => 'tenancy-stancl-config',
                     '--force' => true
                 ]);
             }

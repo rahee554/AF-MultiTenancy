@@ -10,11 +10,8 @@ use ArtflowStudio\Tenancy\Models\Tenant;
 class TenantMiddleware
 {
     /**
-     * Enhanced tenant middleware that properly integrates with stancl/tenancy.
-     * 
-     * This middleware performs tenant status validation BEFORE stancl/tenancy
-     * handles database switching, providing optimal performance and proper
-     * integration with the stancl/tenancy ecosystem.
+     * Handle an incoming request.
+     * This middleware handles tenant status validation after stancl/tenancy initialization.
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -23,54 +20,34 @@ class TenantMiddleware
         $currentDomain = $request->getHost();
         
         if (in_array($currentDomain, $centralDomains)) {
-            // Business routes are not allowed on central domains
-            abort(404, 'Business features are only available on tenant domains.');
+            // Central domain routes are allowed (admin, API, etc.)
+            return $next($request);
         }
 
-        // Get tenant by domain for status checking (without initializing tenancy yet)
-        $tenant = $this->getTenantByDomain($currentDomain);
+        // Get the tenant - stancl/tenancy should have already initialized it
+        $tenant = tenant();
         
-        if ($tenant) {
-            // Check tenant status BEFORE expensive tenancy initialization
-            $status = $tenant->status ?? 'active';
-            
-            switch ($status) {
-                case 'blocked':
-                    return response()->view('errors.tenant-blocked', ['tenant' => $tenant], 403);
-                    
-                case 'suspended':
-                    return response()->view('errors.tenant-suspended', ['tenant' => $tenant], 503);
-                    
-                case 'inactive':
-                    return response()->view('errors.tenant-inactive', ['tenant' => $tenant], 503);
-                    
-                case 'maintenance':
-                    return response()->view('errors.tenant-maintenance', ['tenant' => $tenant], 503);
-            }
+        if (!$tenant) {
+            abort(404, 'Tenant not found');
         }
 
-        // If tenant is active or status check passed, let stancl/tenancy handle
-        // database switching and tenant initialization via DatabaseTenancyBootstrapper
-        // This ensures proper connection management and optimal performance
-        
+        // Check tenant status
+        switch ($tenant->status ?? 'active') {
+            case 'blocked':
+                return response()->view('tenancy::errors.tenant-blocked', ['tenant' => $tenant], 403);
+                
+            case 'suspended':
+                return response()->view('tenancy::errors.tenant-suspended', ['tenant' => $tenant], 503);
+                
+            case 'inactive':
+                return response()->view('tenancy::errors.tenant-inactive', ['tenant' => $tenant], 503);
+        }
+
+        // Update last_accessed_at for active tenants
+        if ($tenant->status === 'active') {
+            $tenant->update(['last_accessed_at' => now()]);
+        }
+
         return $next($request);
-    }
-    
-    /**
-     * Get tenant by domain without initializing full tenancy context.
-     * This is optimized for status checking only.
-     */
-    protected function getTenantByDomain(string $domain): ?Tenant
-    {
-        try {
-            return Tenant::query()
-                ->whereHas('domains', function ($query) use ($domain) {
-                    $query->where('domain', $domain);
-                })
-                ->first();
-        } catch (\Exception $e) {
-            // If there's any issue with tenant lookup, let stancl handle it
-            return null;
-        }
     }
 }
