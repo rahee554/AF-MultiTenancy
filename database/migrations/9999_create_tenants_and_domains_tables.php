@@ -19,7 +19,8 @@ return new class extends Migration
             $table->timestamps();
 
             // Additional columns for Artflow Studio features
-            $table->string('name');
+            $table->string('name')->nullable(); // Make nullable to work with stancl/tenancy
+            $table->string('database')->unique()->nullable(); //
             $table->enum('status', ['active', 'inactive', 'blocked'])->default('active');
             $table->timestamp('last_accessed_at')->nullable();
             $table->json('settings')->nullable();

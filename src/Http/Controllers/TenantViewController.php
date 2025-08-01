@@ -2,7 +2,7 @@
 
 namespace ArtflowStudio\Tenancy\Http\Controllers;
 
-use App\Http\Controllers\Controller;
+use Illuminate\Routing\Controller;
 use ArtflowStudio\Tenancy\Models\Tenant;
 use ArtflowStudio\Tenancy\Services\TenantService;
 use Illuminate\Http\Request;

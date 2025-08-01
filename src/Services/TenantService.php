@@ -3,55 +3,123 @@
 namespace ArtflowStudio\Tenancy\Services;
 
 use ArtflowStudio\Tenancy\Models\Tenant;
-use ArtflowStudio\Tenancy\Models\Domain;
 use Stancl\Tenancy\Database\Models\Domain as StanclDomain;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Stancl\Tenancy\Facades\Tenancy;
 
 class TenantService
 {
-    /**
-     * Create a new tenant with database.
+        /**
+     * Create a new tenant with optional custom database name
+     * Automatically creates the physical database
      */
-    public function createTenant(string $name, string $domain, string $status = 'active', ?string $customDatabaseName = null, ?string $notes = null, ?string $customPrefix = null): Tenant
-    {
-        // Validate domain uniqueness using stancl's domain model
-        if (StanclDomain::where('domain', $domain)->exists()) {
-            throw new \Exception("Domain '{$domain}' already exists");
-        }
-
-        // Create tenant using stancl/tenancy approach
-        $tenant = Tenant::create([
-            'id' => (string) Str::uuid(),
-            'name' => $name,
-            'status' => $status,
-            'data' => [
+    public function createTenant(
+        string $name,
+        string $domain,
+        string $status = 'active',
+        ?string $customDatabase = null,
+        ?string $notes = null
+    ): Tenant {
+        try {
+            // Generate unique tenant ID
+            $tenantId = (string) Str::uuid();
+            
+            // Determine database name
+            $databaseName = $customDatabase ?: ('tenant_' . str_replace('-', '', $tenantId));
+            
+            // Create the physical database first (outside transaction)
+            $this->createPhysicalDatabase($databaseName);
+            
+            // Now create tenant record in central database transaction
+            DB::beginTransaction();
+            
+            // Create tenant record
+            $tenant = Tenant::create([
+                'id' => $tenantId,
                 'name' => $name,
+                'database' => $customDatabase, // Store custom name if provided
                 'status' => $status,
-                'notes' => $notes ?: 'Created via system',
-            ],
-        ]);
+                'data' => [
+                    'notes' => $notes,
+                ],
+            ]);
 
-        // Create domain for the tenant using stancl's domain model
-        $tenant->domains()->create([
-            'domain' => $domain,
-        ]);
+            // Create domain
+            $tenant->domains()->create([
+                'domain' => $domain,
+            ]);
 
-        // The database will be created automatically by stancl/tenancy when needed
-        // No need to manually create the database here
+            DB::commit();
+            
+            // Log success
+            Log::info("Tenant created successfully", [
+                'tenant_id' => $tenant->id,
+                'name' => $name,
+                'domain' => $domain,
+                'database' => $databaseName,
+            ]);
 
-        return $tenant;
+            return $tenant;
+            
+        } catch (\Exception $e) {
+            // Rollback transaction if it was started
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+            
+            // Clean up database if it was created
+            if (isset($databaseName)) {
+                try {
+                    $this->dropPhysicalDatabase($databaseName);
+                } catch (\Exception $cleanupError) {
+                    Log::warning("Failed to cleanup database after tenant creation error", [
+                        'database' => $databaseName,
+                        'error' => $cleanupError->getMessage()
+                    ]);
+                }
+            }
+            
+            Log::error("Failed to create tenant", [
+                'name' => $name,
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+            ]);
+            
+            throw $e;
+        }
     }
 
     /**
-     * Delete a tenant and its database.
+     * Delete a tenant and its physical database
      */
     public function deleteTenant(Tenant $tenant): void
     {
-        $this->dropTenantDatabase($tenant->getDatabaseName());
-        $tenant->delete();
+        $databaseName = $tenant->getDatabaseName();
+        
+        try {
+            // Delete the tenant record first (this will also delete domains via foreign key)
+            $tenant->delete();
+            
+            // Drop the physical database
+            $this->dropPhysicalDatabase($databaseName);
+            
+            Log::info("Tenant and database deleted successfully", [
+                'tenant_id' => $tenant->id,
+                'database' => $databaseName,
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("Failed to delete tenant", [
+                'tenant_id' => $tenant->id,
+                'database' => $databaseName,
+                'error' => $e->getMessage(),
+            ]);
+            
+            throw new \Exception("Failed to delete tenant: " . $e->getMessage());
+        }
     }
 
     /**
@@ -88,13 +156,13 @@ class TenantService
     }
 
     /**
-     * Seed tenant database.
+     * Seed tenant database without user conflicts.
      */
     public function seedTenant(Tenant $tenant): void
     {
         $tenant->run(function () {
             Artisan::call('db:seed', [
-                '--class' => 'DatabaseSeeder',
+                '--class' => 'TenantDatabaseSeeder',
                 '--force' => true,
             ]);
         });
@@ -392,6 +460,48 @@ class TenantService
             return $databaseManager->databaseExists($mockTenant);
         } catch (\Exception $e) {
             return false;
+        }
+    }
+    
+    /**
+     * Create a physical database
+     */
+    private function createPhysicalDatabase(string $databaseName): void
+    {
+        $connection = config('database.default');
+        $charset = config("database.connections.{$connection}.charset", 'utf8mb4');
+        $collation = config("database.connections.{$connection}.collation", 'utf8mb4_unicode_ci');
+        
+        // Check if database already exists
+        $exists = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
+        
+        if (empty($exists)) {
+            DB::statement("CREATE DATABASE `{$databaseName}` CHARACTER SET {$charset} COLLATE {$collation}");
+            Log::info("Physical database created: {$databaseName}");
+        } else {
+            Log::info("Database already exists: {$databaseName}");
+        }
+    }
+    
+    /**
+     * Drop a physical database
+     */
+    private function dropPhysicalDatabase(string $databaseName): void
+    {
+        // Safety check - don't drop main database
+        $mainDatabase = config('database.connections.' . config('database.default') . '.database');
+        if ($databaseName === $mainDatabase) {
+            throw new \Exception("Cannot drop main database: {$databaseName}");
+        }
+        
+        // Check if database exists before dropping
+        $exists = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
+        
+        if (!empty($exists)) {
+            DB::statement("DROP DATABASE `{$databaseName}`");
+            Log::info("Physical database dropped: {$databaseName}");
+        } else {
+            Log::info("Database does not exist, no need to drop: {$databaseName}");
         }
     }
 }

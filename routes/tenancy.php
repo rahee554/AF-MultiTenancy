@@ -19,7 +19,7 @@ use ArtflowStudio\Tenancy\Http\Controllers\RealTimeMonitoringController;
 // CENTRAL DOMAIN ROUTES (Admin Interface)
 // ========================================
 
-Route::middleware(['web', 'auth'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['web'])->prefix('admin')->name('admin.')->group(function () {
     // Dashboard
     Route::get('/dashboard', [TenantViewController::class, 'dashboard'])->name('dashboard');
     

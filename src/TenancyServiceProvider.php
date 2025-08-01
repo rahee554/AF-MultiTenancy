@@ -8,6 +8,8 @@ use ArtflowStudio\Tenancy\Services\TenantService;
 use ArtflowStudio\Tenancy\Commands\TenantCommand;
 use ArtflowStudio\Tenancy\Commands\CreateTestTenantsCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
+use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
+use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
 use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 
@@ -21,6 +23,9 @@ class TenancyServiceProvider extends ServiceProvider
         // Register stancl/tenancy service provider first
         $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
         
+        // Register our event service provider for tenancy events
+        $this->app->register(\ArtflowStudio\Tenancy\Providers\EventServiceProvider::class);
+        
         // Register stancl/tenancy configuration first
         $this->mergeConfigFrom(__DIR__ . '/../config/stancl-tenancy.php', 'tenancy');
         
@@ -29,8 +34,14 @@ class TenancyServiceProvider extends ServiceProvider
             return new TenantService();
         });
 
-        // Merge package config with stancl/tenancy config
-        $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'artflow-tenancy');
+        // Bind high-performance database manager (after stancl registration)
+        $this->app->singleton(
+            \Stancl\Tenancy\Contracts\TenantDatabaseManager::class,
+            \ArtflowStudio\Tenancy\Database\HighPerformanceMySQLDatabaseManager::class
+        );
+
+        // Merge our configuration with defaults
+        $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
     }
 
     /**
@@ -38,25 +49,51 @@ class TenancyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Auto-register middleware
-        $this->registerMiddleware();
-        
-        // Load package routes
-        $this->loadPackageRoutes();
-        
-        // Load migrations
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
-
-        // Load views
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'tenancy');
+        // Publish config files with performance optimizations
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__ . '/../config/artflow-tenancy.php' => config_path('artflow-tenancy.php'),
+            ], 'artflow-tenancy-config');
+            
+            $this->publishes([
+                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
+            ], 'tenancy-config');
+            
+            $this->publishes([
+                __DIR__ . '/../docs' => base_path('docs/tenancy'),
+            ], 'tenancy-docs');
+            
+            $this->publishes([
+                __DIR__ . '/../stubs' => base_path('stubs/tenancy'),
+            ], 'tenancy-stubs');
+            
+            // Publish all tenancy files at once
+            $this->publishes([
+                __DIR__ . '/../config/artflow-tenancy.php' => config_path('artflow-tenancy.php'),
+                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
+                __DIR__ . '/../docs' => base_path('docs/tenancy'),
+                __DIR__ . '/../stubs' => base_path('stubs/tenancy'),
+            ], 'tenancy-all');
+        }
 
         // Register commands
-        $this->registerCommands();
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                TenantCommand::class,
+                CreateTestTenantsCommand::class,
+                TestPerformanceCommand::class,
+                HealthCheckCommand::class,
+                ComprehensiveTenancyTestCommand::class,
+            ]);
+        }
 
-        // Register publishables
-        $this->registerPublishables();
-
-        // Auto-publish and migrate on package install
+        // Load routes
+        $this->loadRoutes();
+        
+        // Register middleware
+        $this->registerMiddleware();
+        
+        // Auto-setup if needed
         $this->autoSetup();
     }
 
@@ -79,7 +116,7 @@ class TenancyServiceProvider extends ServiceProvider
         
         // Register API middleware group
         $router->middlewareGroup('tenancy.api', [
-            'throttle:api',
+            'api',
             ApiAuthMiddleware::class,
         ]);
     }
@@ -87,84 +124,25 @@ class TenancyServiceProvider extends ServiceProvider
     /**
      * Load package routes
      */
-    protected function loadPackageRoutes(): void
+    protected function loadRoutes(): void
     {
-        Route::group([
-            'namespace' => 'ArtflowStudio\Tenancy\Http\Controllers',
-        ], function () {
-            // Load tenancy routes (admin + API)
-            require __DIR__ . '/../routes/tenancy.php';
-        });
+        // Load web routes for admin interface
+        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        
+        // Load API routes
+        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
     }
 
     /**
-     * Register commands
-     */
-    protected function registerCommands(): void
-    {
-        if ($this->app->runningInConsole()) {
-            $this->commands([
-                TenantCommand::class,
-                CreateTestTenantsCommand::class,
-                TestPerformanceCommand::class,
-                \ArtflowStudio\Tenancy\Commands\InstallPackageCommand::class,
-            ]);
-        }
-    }
-
-    /**
-     * Register publishable assets
-     */
-    protected function registerPublishables(): void
-    {
-        if ($this->app->runningInConsole()) {
-            // Publish stancl/tenancy config (required for proper integration)
-            $this->publishes([
-                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
-            ], 'tenancy-stancl-config');
-
-            // Publish tenancy routes (recommended for customization)
-            $this->publishes([
-                __DIR__ . '/../routes/tenancy.php' => base_path('routes/tenancy.php'),
-            ], 'tenancy-routes');
-
-            // Publish artflow tenancy config (optional)
-            $this->publishes([
-                __DIR__ . '/../config/tenancy.php' => config_path('artflow-tenancy.php'),
-            ], 'tenancy-config');
-
-            // Publish views (optional - for dashboard customization)
-            $this->publishes([
-                __DIR__ . '/../resources/views' => resource_path('views/vendor/tenancy'),
-            ], 'tenancy-views');
-
-            // Publish migrations (optional - package auto-runs them)
-            $this->publishes([
-                __DIR__ . '/../database/migrations' => database_path('migrations'),
-            ], 'tenancy-migrations');
-
-            // Publish all assets at once
-            $this->publishes([
-                __DIR__ . '/../config/stancl-tenancy.php' => config_path('tenancy.php'),
-                __DIR__ . '/../config/tenancy.php' => config_path('artflow-tenancy.php'),
-                __DIR__ . '/../routes/tenancy.php' => base_path('routes/tenancy.php'),
-            ], 'tenancy');
-        }
-    }
-
-    /**
-     * Auto-setup for initial package installation
+     * Auto-setup configuration if needed
      */
     protected function autoSetup(): void
     {
-        if ($this->app->runningInConsole() && !config('tenancy')) {
-            // Auto-publish critical stancl/tenancy configuration if not already published
-            if (!file_exists(config_path('tenancy.php'))) {
-                \Illuminate\Support\Facades\Artisan::call('vendor:publish', [
-                    '--tag' => 'tenancy-stancl-config',
-                    '--force' => true
-                ]);
-            }
+        // Auto-publish config if it doesn't exist
+        if (!file_exists(config_path('artflow-tenancy.php'))) {
+            $this->publishes([
+                __DIR__ . '/../config/artflow-tenancy.php' => config_path('artflow-tenancy.php'),
+            ], 'config');
         }
     }
 }
