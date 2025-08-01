@@ -18,6 +18,9 @@ class TenancyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Register stancl/tenancy service provider first
+        $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
+        
         // Register stancl/tenancy configuration first
         $this->mergeConfigFrom(__DIR__ . '/../config/stancl-tenancy.php', 'tenancy');
         

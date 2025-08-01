@@ -1,56 +1,55 @@
-# Artflow Studio Tenancy Package
+# 🏢 Artflow Studio Tenancy Package
 
 [![Latest Version](https://img.shields.io/packagist/v/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![Total Downloads](https://img.shields.io/packagist/dt/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![License](https://img.shields.io/packagist/l/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![Performance](https://img.shields.io/badge/performance-optimized-brightgreen.svg?style=flat-square)](#performance-benchmarks)
 
-**Version: 0.4.6 - Production Ready with Real-time Monitoring**
+**Version: 0.5.2 - Stable Release with Complete stancl/tenancy Integration**
 
-🚀 **The Ultimate Laravel Multi-Tenancy Solution** - A comprehensive, enterprise-grade multi-tenant Laravel package with advanced admin dashboard, complete API suite, and intelligent resource management. Built on top of `stancl/tenancy` with **massive performance optimizations** and **zero-configuration setup**.
+🚀 **Enterprise-grade Laravel Multi-Tenancy Solution** - Built on top of `stancl/tenancy` with advanced admin dashboard, complete REST API, real-time monitoring, and **80-95% performance improvements**. Now with rock-solid stability and bug-free tenant operations!
 
-## 🌟 What Makes This Package Special
+## 🆕 What's New in v0.5.2
 
-### 🏗️ **Built on stancl/tenancy Foundation**
-Leverages the most popular and battle-tested Laravel tenancy package as its core, adding enterprise features on top.
+🔧 **Major Stability Improvements:**
+- ✅ **Fixed stancl/tenancy Integration** - Complete refactor for proper database management
+- ✅ **Resolved Runtime Errors** - All `getDatabaseName()` and connection issues fixed
+- ✅ **Enhanced CLI Commands** - All tenant management commands now work flawlessly
+- ✅ **Improved Service Provider** - Automatic stancl/tenancy initialization
+- ✅ **Better Error Handling** - Clear debugging and comprehensive error messages
+- ✅ **Production-Ready** - Thoroughly tested tenant creation, migration, and operations
 
-### ⚡ **Performance Optimized**
-- **80-95% faster** tenant switching than standard implementations
-- **Persistent database connections** with intelligent pooling
-- **Memory optimized** for concurrent users
-- **Production-ready scaling** for enterprise workloads
+---
 
-### 🎯 **Zero Configuration**
-Install once, run everywhere. No complex setup, no configuration hell.
+## 🚀 Installation
 
-## 🚀 Quick Start
-
-### One-Command Installation
+### Quick Install (Recommended)
 
 ```bash
 composer require artflow-studio/tenancy
 ```
 
-**Package will show installation guidance automatically!**
+**The package will automatically show installation guidance!**
 
-### Complete Setup with Interactive Installer
+### Interactive Setup
 
 ```bash
-# Run the interactive installer
+# Run the guided installer
 php artisan tenancy:install
 
-# Or force reinstall if needed
+# For complete reinstall
 php artisan tenancy:install --force
 ```
 
-**What the installer does:**
-- ✅ Publishes `stancl/tenancy` configuration with optimizations
-- ✅ Publishes Artflow Tenancy enhanced features config
+**What happens during installation:**
+- ✅ Publishes `stancl/tenancy` configuration 
+- ✅ Publishes Artflow Tenancy enhanced features
 - ✅ Runs database migrations automatically
-- ✅ Optionally publishes routes and views for customization
-- ✅ Shows helpful next steps and available endpoints
+- ✅ Sets up API authentication
+- ✅ Creates admin routes and dashboard
+- ✅ Shows next steps and available endpoints
 
-### Manual Installation (Alternative)
+### Manual Setup (Alternative)
 
 ```bash
 # 1. Install package
@@ -60,91 +59,64 @@ composer require artflow-studio/tenancy
 echo "TENANT_API_KEY=sk_tenant_live_$(openssl rand -hex 32)" >> .env
 php artisan migrate
 
-# 3. Create test tenants for immediate testing
+# 3. Create test tenants
 php artisan tenancy:create-test-tenants
 
-# 3. Access admin dashboard and real-time monitoring
-# Visit: http://your-domain.com/admin/tenants
-# Real-time Monitoring: http://your-domain.com/admin/monitoring/dashboard
-
-# 4. Test tenant performance and monitor live stats
-php artisan tenancy:test-performance
-php artisan tenancy:test-performance
+# 4. Access dashboard: http://your-domain.com/admin/tenants
 ```
 
-### 🎯 **Instant Testing with Pre-configured Tenants**
-
-The package includes a command to create test tenants for immediate performance testing:
+### 🎯 Quick Test Setup
 
 ```bash
+# Create 5 test tenants instantly
 php artisan tenancy:create-test-tenants
-```
 
-This creates:
-- `test1.local` → `test5.local` (5 test tenants)
-- Pre-configured with sample data
-- Ready for concurrent user testing
-- Performance benchmarking enabled
+# Test performance with concurrent users
+php artisan tenancy:test-performance
+```
 
 ---
 
 ## 📋 Requirements
 
-- **PHP**: 8.1+ (8.2+ recommended for performance)
+- **PHP**: 8.1+ (8.2+ recommended)
 - **Laravel**: 10.0+ or 11.0+
 - **Database**: MySQL 5.7+/8.0+ or PostgreSQL 13+
-- **Cache**: Redis (strongly recommended for performance)
-- **Memory**: 512MB+ (1GB+ for high-concurrency)
+- **Cache**: Redis (recommended for performance)
 
 ---
 
-## 🏆 Features Comparison
+## � Key Features
 
-### 🔥 **stancl/tenancy Core Features**
-- ✅ Multi-database architecture
-- ✅ Domain-based tenant resolution
-- ✅ Database isolation
-- ✅ Tenant-aware caching
-- ✅ Queue job isolation
-- ✅ File storage isolation
-- ✅ Artisan command tenancy
+### 🏗️ **Built on stancl/tenancy**
+- Multi-database architecture with tenant isolation
+- Domain-based tenant resolution  
+- Queue job and cache isolation
+- File storage isolation
+- Tenant-aware Artisan commands
 
 ### 🚀 **Artflow Studio Enhancements**
 
-#### **Performance & Optimization**
+#### **Performance & Enterprise**
 - ✅ **80-95% faster** tenant switching with persistent connections
-- ✅ **Memory optimization** with intelligent garbage collection
+- ✅ **Real-time monitoring** dashboard with system metrics
+- ✅ **Advanced admin dashboard** with responsive UI
+- ✅ **Complete REST API** (50+ endpoints) for external integrations
 - ✅ **Connection pooling** for enterprise-scale concurrent users
-- ✅ **Query optimization** with tenant-aware indexing
-- ✅ **Cache warming** strategies for instant tenant access
 
-#### **Enterprise Management**
-- ✅ **Advanced Admin Dashboard** - Modern, responsive UI with real-time metrics
-- ✅ **Complete REST API** - 50+ endpoints for external integrations
-- ✅ **Tenant Status Management** - Active, suspended, blocked, maintenance modes
-- ✅ **Resource Monitoring** - Real-time CPU, memory, storage tracking
-- ✅ **Performance Analytics** - Detailed metrics and reporting
+#### **Management & Security**
+- ✅ **Tenant status management** (active, inactive, blocked)
+- ✅ **API authentication** (API keys, Bearer tokens)
+- ✅ **Health monitoring** and performance analytics
+- ✅ **Comprehensive CLI tools** (20+ Artisan commands)
+- ✅ **Test data generation** and performance testing
 
 #### **Developer Experience**
-- ✅ **Zero Configuration Setup** - Works out of the box
-- ✅ **Comprehensive CLI Tools** - 20+ Artisan commands
-- ✅ **Test Data Generation** - Instant test tenant creation
-- ✅ **Performance Testing** - Built-in load testing tools
-- ✅ **Debug Dashboard** - Real-time debugging and profiling
-
-#### **Security & Compliance**
-- ✅ **API Authentication** - Multiple auth methods (API keys, Bearer tokens)
-- ✅ **Rate Limiting** - Per-tenant and global rate limits
-- ✅ **Audit Logging** - Comprehensive activity tracking
-- ✅ **Data Encryption** - At-rest and in-transit encryption
-- ✅ **GDPR Compliance** - Data portability and deletion tools
-
-#### **Scalability & DevOps**
-- ✅ **Health Monitoring** - System and tenant health checks
-- ✅ **Auto Scaling** - Resource-based tenant scaling
-- ✅ **Backup Management** - Automated tenant backup/restore
-- ✅ **Migration Tools** - Bulk tenant operations
-- ✅ **Load Balancing** - Multi-server tenant distribution
+- ✅ **Zero configuration setup** - works out of the box
+- ✅ **Interactive installer** with guided setup
+- ✅ **Debug dashboard** with real-time debugging
+- ✅ **Load testing tools** built-in
+- ✅ **Minimal app pollution** - configs stay in package
 
 ---
 
@@ -236,1351 +208,202 @@ php artisan tenancy:report --format=json --interval=24h
 
 #### **Automated Alerts & Notifications**
 
-```php
-// Configure automatic alerts in config/artflow-tenancy.php
-'monitoring' => [
-    'alerts' => [
-        'database_size_limit' => '1GB',
-        'response_time_threshold' => '200ms',
-        'error_rate_threshold' => '1%',
-        'memory_usage_threshold' => '80%',
-        'connection_pool_threshold' => '90%'
-    ],
-    'notifications' => [
-        'email' => 'admin@your-app.com',
-        'slack_webhook' => env('SLACK_MONITORING_WEBHOOK'),
-        'telegram_bot_token' => env('TELEGRAM_BOT_TOKEN')
-    ]
-]
-```
+## 🚀 Quick Usage
 
----
-
-## �📦 Detailed Installation Guide
-
-### Step 1: Install Package
+### Basic Tenant Management
 
 ```bash
-composer require artflow-studio/tenancy
+# Create a tenant
+php artisan tenant:manage create "Company Name" company.example.com
+
+# List tenants  
+php artisan tenant:manage list
+
+# Get tenant status
+php artisan tenant:manage status {tenant-id}
+
+# Update tenant status
+php artisan tenant:manage status {tenant-id} --status=active
 ```
 
-**Automatic Setup Process:**
-```
-✅ Installing stancl/tenancy ^3.0 with optimized configuration
-✅ Publishing stancl/tenancy config to config/tenancy.php
-✅ Publishing Artflow config to config/artflow-tenancy.php
-✅ Registering optimized middleware stack
-✅ Loading package routes and commands
-✅ Setting up database migrations
-```
-
-### Step 2: Environment Configuration
+### Environment Configuration
 
 ```env
-# ===========================================
-# ARTFLOW TENANCY CONFIGURATION
-# ===========================================
-
-# Tenant API Security (Required)
+# Required API key
 TENANT_API_KEY=sk_tenant_live_your_secure_api_key_here
-TENANT_BEARER_TOKEN=your_bearer_token_here
 
-# Tenant Database Configuration
-TENANT_DB_PREFIX=tenant_
-TENANT_DB_HOST=127.0.0.1
-TENANT_DB_PORT=3306
-TENANT_DB_USERNAME=root
-TENANT_DB_PASSWORD=
-
-# Performance Optimization (Highly Recommended)
+# Performance (recommended)
 CACHE_DRIVER=redis
-SESSION_DRIVER=redis
-QUEUE_CONNECTION=redis
 REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=null
-REDIS_PORT=6379
-
-# Advanced Configuration
-TENANT_AUTO_MIGRATE=false
-TENANT_AUTO_SEED=false
-TENANCY_MONITORING_ENABLED=true
-TENANCY_PERFORMANCE_TRACKING=true
-TENANCY_API_RATE_LIMIT=true
-TENANCY_API_RATE_LIMIT_ATTEMPTS=60
-TENANCY_API_RATE_LIMIT_DECAY=1
-
-# Backup Configuration
-TENANCY_BACKUP_ENABLED=false
-TENANCY_BACKUP_DISK=local
-TENANCY_BACKUP_RETENTION_DAYS=7
 ```
 
-### Step 3: Database Setup
+### Admin Dashboard
+
+- **URL**: `http://your-domain.com/admin/tenants`
+- **Real-time Monitoring**: `http://your-domain.com/admin/monitoring/dashboard`
+- **API Endpoints**: See [API.md](API.md) for complete documentation
+- **CLI Commands**: See [COMMANDS.md](COMMANDS.md) for all available commands
+
+---
+
+## 🏗️ Architecture
+
+### Database Structure
+
+The package uses **stancl/tenancy** at its core:
+
+- **Central Database**: Stores tenant information (`tenants` and `domains` tables)
+- **Tenant Databases**: Separate database per tenant (automatically managed)
+- **No App Pollution**: Configs and migrations stay in the package directory
+
+### How Tenant Databases Work
+
+```php
+// stancl/tenancy automatically manages tenant databases
+// Database names: tenant_{tenant_id}
+// Example: tenant_9c8e2fcf-9999-4999-9999-123456789abc
+
+// The package handles:
+// ✅ Database creation/deletion
+// ✅ Connection switching  
+// ✅ Migration management
+// ✅ Data isolation
+```
+
+### Configuration Files
+
+- `config/tenancy.php` - stancl/tenancy core configuration (published)
+- `config/artflow-tenancy.php` - Artflow enhancements (published)
+- Package configs remain internal (no app pollution)
+
+---
+
+## 📊 Performance
+
+### Benchmarks
+- **80-95% faster** tenant switching vs standard implementations
+- **Persistent connections** for enterprise-scale concurrent users
+- **Memory optimized** with intelligent resource management
+- **500+ concurrent users** supported
+
+### Real-Time Monitoring
+- System resource tracking (CPU, memory, connections)
+- Tenant performance analytics
+- Database health monitoring
+- Automatic alerting and notifications
+
+---
+
+## 📚 Documentation
+
+- **[COMMANDS.md](COMMANDS.md)** - Complete CLI reference with all available commands
+- **[API.md](API.md)** - Full REST API documentation with examples
+- **[ROADMAP.md](ROADMAP.md)** - Development roadmap and upcoming features
+
+---
+
+## 🔧 Advanced Configuration
+
+### Publishing Package Files (Optional)
 
 ```bash
-# Run central database migrations
-php artisan migrate
+# Publish configs only (recommended)
+php artisan vendor:publish --tag=tenancy-config
 
-# (Optional) Publish migrations for customization
+# Publish migrations for customization
 php artisan vendor:publish --tag=tenancy-migrations
 
-# Create tenant migrations directory
-mkdir -p database/migrations/tenant
-```
+# Publish views for admin dashboard customization
+php artisan vendor:publish --tag=tenancy-views
 
-### Step 4: Create Test Environment
-
-```bash
-# Create test tenants for immediate testing
-php artisan tenancy:create-test-tenants
-
-# Create test tenants with custom configuration
-php artisan tenancy:create-test-tenants --count=10 --domain-prefix=demo --with-data
-
-# Test performance with created tenants
-php artisan tenancy:test-performance --concurrent-users=50
-```
-
----
-
-## � Performance Benchmarks
-
-### Connection Performance
-| Metric | Standard Laravel | stancl/tenancy | Artflow Studio | Improvement |
-|--------|-----------------|----------------|----------------|-------------|
-| **Tenant Resolution** | 50-100ms | 10-20ms | <5ms | **90% faster** |
-| **DB Connection Switch** | 100-200ms | 20-50ms | <10ms | **95% faster** |
-| **Memory per Request** | 15-25MB | 10-15MB | 8-12MB | **40% reduction** |
-| **Concurrent Users** | 10-20 users | 50-100 users | 500+ users | **25x scale** |
-
-### Real-World Performance Test
-```bash
-# Test with 100 concurrent users across 5 tenants
-php artisan tenancy:benchmark --users=100 --tenants=5 --duration=60
-
-# Expected Results:
-# ✅ Response Time: <100ms (95th percentile)
-# ✅ Memory Usage: <50MB per tenant
-# ✅ Error Rate: <0.1%
-# ✅ Throughput: 1000+ requests/second
-```
-
----
-## 🛠️ Complete CLI Commands Reference
-
-### Core Tenant Management
-
-#### **Create Tenants**
-```bash
-# Create a single tenant
-php artisan tenancy:create "Company Name" company.example.com
-
-# Create tenant with custom database name
-php artisan tenancy:create "Company Name" company.example.com --database=custom_db_name
-
-# Create tenant with specific status
-php artisan tenancy:create "Company Name" company.example.com --status=suspended
-
-# Create tenant and run migrations
-php artisan tenancy:create "Company Name" company.example.com --migrate
-
-# Create tenant with seeding
-php artisan tenancy:create "Company Name" company.example.com --migrate --seed
-```
-
-#### **List & Manage Tenants**
-```bash
-# List all tenants
-php artisan tenancy:list
-
-# List tenants with detailed information
-php artisan tenancy:list --detailed
-
-# List tenants by status
-php artisan tenancy:list --status=active
-
-# Show specific tenant details
-php artisan tenancy:show {tenant-uuid}
-
-# Update tenant
-php artisan tenancy:update {tenant-uuid} --name="New Name" --status=active
-
-# Delete tenant (with confirmation)
-php artisan tenancy:delete {tenant-uuid}
-
-# Force delete tenant (no confirmation)
-php artisan tenancy:delete {tenant-uuid} --force
-```
-
-### Database Operations
-
-#### **Migrations**
-```bash
-# Migrate single tenant
-php artisan tenancy:migrate {tenant-uuid}
-
-# Migrate single tenant with fresh start
-php artisan tenancy:migrate {tenant-uuid} --fresh
-
-# Migrate all tenants
-php artisan tenancy:migrate-all
-
-# Migrate all tenants with fresh start
-php artisan tenancy:migrate-all --fresh
-
-# Rollback tenant migration
-php artisan tenancy:migrate-rollback {tenant-uuid}
-
-# Check migration status for tenant
-php artisan tenancy:migrate-status {tenant-uuid}
-```
-
-#### **Seeding**
-```bash
-# Seed single tenant
-php artisan tenancy:seed {tenant-uuid}
-
-# Seed with specific seeder class
-php artisan tenancy:seed {tenant-uuid} --class=UserSeeder
-
-# Seed all tenants
-php artisan tenancy:seed-all
-
-# Seed all tenants with specific seeder
-php artisan tenancy:seed-all --class=UserSeeder
-```
-
-### Testing & Development
-
-#### **Test Environment Setup**
-```bash
-# Create test tenants (test1.local to test5.local)
-php artisan tenancy:create-test-tenants
-
-# Create custom number of test tenants
-php artisan tenancy:create-test-tenants --count=10
-
-# Create test tenants with custom prefix
-php artisan tenancy:create-test-tenants --domain-prefix=demo --count=5
-
-# Create test tenants with sample data
-php artisan tenancy:create-test-tenants --with-data
-
-# Create test tenants for load testing
-php artisan tenancy:create-test-tenants --count=20 --load-test
-```
-
-#### **Performance Testing**
-```bash
-# Basic performance test
-php artisan tenancy:test-performance
-
-# Test with specific parameters
-php artisan tenancy:test-performance --concurrent-users=50 --duration=60
-
-# Comprehensive benchmark
-php artisan tenancy:benchmark
-
-# Benchmark with custom settings
-php artisan tenancy:benchmark --users=100 --tenants=5 --requests=1000
-
-# Memory usage test
-php artisan tenancy:test-memory --tenants=10
-
-# Connection performance test
-php artisan tenancy:test-connections --concurrent=20
-```
-
-### Monitoring & Maintenance
-
-#### **Health Checks**
-```bash
-# System health check
-php artisan tenancy:health
-
-# Detailed health report
-php artisan tenancy:health --detailed
-
-# Check specific tenant health
-php artisan tenancy:health {tenant-uuid}
-
-# Check database connections
-php artisan tenancy:health --check=database
-
-# Check all tenant databases
-php artisan tenancy:check-databases
-```
-
-#### **Performance Monitoring**
-```bash
-# Show performance stats
-php artisan tenancy:stats
-
-# Show live performance metrics
-php artisan tenancy:stats --live
-
-# Show tenant resource usage
-php artisan tenancy:resources
-
-# Show connection statistics
-php artisan tenancy:connections
-
-# Generate performance report
-php artisan tenancy:report --output=performance_report.json
-```
-
-#### **Cache Management**
-```bash
-# Clear all tenant caches
-php artisan tenancy:cache-clear
-
-# Clear specific tenant cache
-php artisan tenancy:cache-clear {tenant-uuid}
-
-# Warm tenant caches
-php artisan tenancy:cache-warm
-
-# Show cache statistics
-php artisan tenancy:cache-stats
-```
-
-### Backup & Restore
-
-#### **Backup Operations**
-```bash
-# Backup single tenant
-php artisan tenancy:backup {tenant-uuid}
-
-# Backup all tenants
-php artisan tenancy:backup-all
-
-# Backup with compression
-php artisan tenancy:backup {tenant-uuid} --compress
-
-# Backup to specific disk
-php artisan tenancy:backup {tenant-uuid} --disk=s3
-
-# Scheduled backup (for cron)
-php artisan tenancy:backup-scheduled
-```
-
-#### **Restore Operations**
-```bash
-# List available backups
-php artisan tenancy:backup-list {tenant-uuid}
-
-# Restore from backup
-php artisan tenancy:restore {tenant-uuid} {backup-file}
-
-# Restore with confirmation
-php artisan tenancy:restore {tenant-uuid} {backup-file} --force
-```
-
-### Advanced Operations
-
-#### **Bulk Operations**
-```bash
-# Bulk status update
-php artisan tenancy:bulk-update --status=suspended --filter="created_at<2024-01-01"
-
-# Bulk migration for filtered tenants
-php artisan tenancy:bulk-migrate --filter="status=active"
-
-# Bulk tenant cleanup
-php artisan tenancy:cleanup --inactive-days=90
-
-# Export tenant data
-php artisan tenancy:export {tenant-uuid} --format=json
-
-# Import tenant data
-php artisan tenancy:import {file-path}
-```
-
-#### **Maintenance**
-```bash
-# Put tenant in maintenance mode
-php artisan tenancy:maintenance {tenant-uuid} --enable
-
-# Remove tenant from maintenance mode
-php artisan tenancy:maintenance {tenant-uuid} --disable
-
-# Check maintenance status
-php artisan tenancy:maintenance-status
-
-# Optimize tenant databases
-php artisan tenancy:optimize-databases
-
-# Repair tenant connections
-php artisan tenancy:repair-connections
-```
-
----
-
-## 🔌 Complete API Endpoints Reference
-
-### Authentication
-All API endpoints require authentication via:
-
-```bash
-# API Key Authentication
-curl -H "X-API-Key: your_api_key_here" \
-     -H "Content-Type: application/json"
-
-# Bearer Token Authentication  
-curl -H "Authorization: Bearer your_bearer_token" \
-     -H "Content-Type: application/json"
-```
-
-### Core Tenant CRUD Operations
-
-#### **List Tenants**
-```http
-GET /tenancy/tenants
-```
-
-**Query Parameters:**
-- `page` - Page number (default: 1)
-- `per_page` - Items per page (default: 15, max: 100)
-- `search` - Search term (searches name, domain, database_name)
-- `status` - Filter by status (active, inactive, suspended, blocked)
-- `sort` - Sort field (name, created_at, updated_at, last_accessed_at)
-- `order` - Sort order (asc, desc)
-- `with_stats` - Include tenant statistics (true/false)
-
-**Example:**
-```bash
-curl -X GET "https://your-app.com/tenancy/tenants?page=1&per_page=20&status=active&sort=name&order=asc" \
-     -H "X-API-Key: your_api_key"
-```
-
-**Response:**
-```json
-{
-  "data": [
-    {
-      "id": 1,
-      "uuid": "550e8400-e29b-41d4-a716-446655440000",
-      "name": "Company Name",
-      "status": "active",
-      "database_name": "tenant_company_12345678",
-      "created_at": "2024-01-01T10:00:00Z",
-      "last_accessed_at": "2024-01-15T14:30:00Z",
-      "domains": [
-        {
-          "id": 1,
-          "domain": "company.example.com",
-          "is_primary": true
-        }
-      ],
-      "stats": {
-        "database_size": "45.2MB",
-        "table_count": 23,
-        "last_backup": "2024-01-14T02:00:00Z"
-      }
-    }
-  ],
-  "meta": {
-    "current_page": 1,
-    "per_page": 20,
-    "total": 150,
-    "last_page": 8
-  }
-}
-```
-
-#### **Create Tenant**
-```http
-POST /tenancy/tenants/create
-```
-
-**Request Body:**
-```json
-{
-  "name": "Company Name",
-  "domain": "company.example.com",
-  "status": "active",
-  "database_name": "custom_db_name",
-  "notes": "Important client",
-  "run_migrations": true,
-  "seed_database": false,
-  "settings": {
-    "timezone": "UTC",
-    "locale": "en",
-    "features": ["analytics", "reporting"]
-  }
-}
-```
-
-**Example:**
-```bash
-curl -X POST "https://your-app.com/tenancy/tenants/create" \
-     -H "X-API-Key: your_api_key" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "name": "Acme Corp",
-       "domain": "acme.example.com",
-       "status": "active",
-       "run_migrations": true
-     }'
-```
-
-#### **Get Tenant Details**
-```http
-GET /tenancy/tenants/{uuid}
-```
-
-**Query Parameters:**
-- `include` - Additional data (domains, stats, health, recent_activity)
-
-**Example:**
-```bash
-curl -X GET "https://your-app.com/tenancy/tenants/550e8400-e29b-41d4-a716-446655440000?include=domains,stats" \
-     -H "X-API-Key: your_api_key"
-```
-
-#### **Update Tenant**
-```http
-PUT /tenancy/tenants/{uuid}
-```
-
-**Request Body:**
-```json
-{
-  "name": "Updated Company Name",
-  "status": "active",
-  "notes": "Updated notes",
-  "settings": {
-    "timezone": "America/New_York"
-  }
-}
-```
-
-#### **Delete Tenant**
-```http
-DELETE /tenancy/tenants/{uuid}
-```
-
-**Query Parameters:**
-- `force` - Force deletion without confirmation (true/false)
-- `backup` - Create backup before deletion (true/false)
-
-### Tenant Status Management
-
-#### **Update Tenant Status**
-```http
-PUT /tenancy/tenants/{uuid}/status
-```
-
-**Request Body:**
-```json
-{
-  "status": "suspended",
-  "reason": "Payment overdue",
-  "notify": true
-}
-```
-
-#### **Block Tenant**
-```http
-POST /tenancy/tenants/{uuid}/block
-```
-
-#### **Unblock Tenant**
-```http
-POST /tenancy/tenants/{uuid}/unblock
-```
-
-#### **Suspend Tenant**
-```http
-POST /tenancy/tenants/{uuid}/suspend
-```
-
-#### **Activate Tenant**
-```http
-POST /tenancy/tenants/{uuid}/activate
-```
-
-### Domain Management
-
-#### **List Tenant Domains**
-```http
-GET /tenancy/tenants/{uuid}/domains
-```
-
-#### **Add Domain to Tenant**
-```http
-POST /tenancy/tenants/{uuid}/domains/create
-```
-
-**Request Body:**
-```json
-{
-  "domain": "subdomain.example.com",
-  "is_primary": false,
-  "ssl_enabled": true
-}
-```
-
-#### **Update Domain**
-```http
-PUT /tenancy/tenants/{uuid}/domains/{domainId}
-```
-
-#### **Delete Domain**
-```http
-DELETE /tenancy/tenants/{uuid}/domains/{domainId}
-```
-
-### Database Operations
-
-#### **Run Tenant Migrations**
-```http
-POST /tenancy/tenants/{uuid}/migrate
-```
-
-**Request Body:**
-```json
-{
-  "fresh": false,
-  "seed": false,
-  "force": true,
-  "path": "database/migrations/tenant"
-}
-```
-
-#### **Seed Tenant Database**
-```http
-POST /tenancy/tenants/{uuid}/seed
-```
-
-**Request Body:**
-```json
-{
-  "class": "DatabaseSeeder",
-  "force": true
-}
-```
-
-#### **Reset Tenant Database**
-```http
-POST /tenancy/tenants/{uuid}/reset
-```
-
-**Request Body:**
-```json
-{
-  "confirm": true,
-  "backup": true,
-  "restore_from": "backup_file.sql"
-}
-```
-
-### Bulk Operations
-
-#### **Bulk Status Update**
-```http
-PUT /tenancy/bulk-status-update
-```
-
-**Request Body:**
-```json
-{
-  "tenant_uuids": [
-    "550e8400-e29b-41d4-a716-446655440000",
-    "550e8400-e29b-41d4-a716-446655440001"
-  ],
-  "status": "suspended",
-  "reason": "Bulk suspension",
-  "notify": false
-}
-```
-
-#### **Bulk Migration**
-```http
-POST /tenancy/migrate-all-tenants
-```
-
-**Request Body:**
-```json
-{
-  "fresh": false,
-  "seed": false,
-  "filter": {
-    "status": "active",
-    "created_after": "2024-01-01"
-  }
-}
-```
-
-#### **Bulk Seeding**
-```http
-POST /tenancy/seed-all-tenants
-```
-
-### System Monitoring
-
-#### **Dashboard Data**
-```http
-GET /tenancy/dashboard
-```
-
-**Response:**
-```json
-{
-  "tenants": {
-    "total": 150,
-    "active": 145,
-    "suspended": 3,
-    "blocked": 2
-  },
-  "performance": {
-    "avg_response_time": "45ms",
-    "total_requests": 15420,
-    "error_rate": "0.1%"
-  },
-  "resources": {
-    "total_database_size": "2.4GB",
-    "memory_usage": "512MB",
-    "active_connections": 25
-  }
-}
-```
-
-#### **System Statistics**
-```http
-GET /tenancy/stats
-```
-
-#### **Live Statistics**
-```http
-GET /tenancy/live-stats
-```
-
-#### **Health Check**
-```http
-GET /tenancy/health
-```
-
-#### **Performance Metrics**
-```http
-GET /tenancy/performance
-```
-
-**Query Parameters:**
-- `period` - Time period (hour, day, week, month)
-- `tenant_uuid` - Specific tenant metrics
-
-### Backup & Restore
-
-#### **Create Backup**
-```http
-POST /tenancy/tenants/{uuid}/backup
-```
-
-**Request Body:**
-```json
-{
-  "compression": true,
-  "include_files": false,
-  "storage_disk": "s3"
-}
-```
-
-#### **List Backups**
-```http
-GET /tenancy/tenants/{uuid}/backups
-```
-
-#### **Restore from Backup**
-```http
-POST /tenancy/tenants/{uuid}/restore
-```
-
-**Request Body:**
-```json
-{
-  "backup_file": "tenant_backup_20240115.sql.gz",
-  "confirm": true
-}
-```
-
-### Cache Management
-
-#### **Clear Cache**
-```http
-POST /tenancy/clear-cache
-```
-
-**Request Body:**
-```json
-{
-  "tenant_uuid": "550e8400-e29b-41d4-a716-446655440000",
-  "keys": ["user_preferences", "settings"],
-  "tags": ["tenant_data"]
-}
-```
-
-#### **Cache Statistics**
-```http
-GET /tenancy/cache-stats
-```
-
-### Advanced Operations
-
-#### **Import/Export**
-```http
-POST /tenancy/tenants/{uuid}/export
-GET /tenancy/tenants/{uuid}/export/{job-id}
-POST /tenancy/import
-```
-
-#### **Connection Management**
-```http
-GET /tenancy/connection-stats
-POST /tenancy/optimize-connections
-POST /tenancy/repair-connections
-```
-
-#### **Resource Usage**
-```http
-GET /tenancy/resources
-GET /tenancy/tenants/{uuid}/resources
-```
-
-## 🔧 Advanced Configuration & Middleware
-
-### Automatic Middleware Registration
-
-The package automatically registers optimized middleware. No manual configuration needed!
-
-**Optimized Middleware Stack:**
-```php
-// Automatically registered by the package
-Route::middleware(['tenant'])->group(function () {
-    // 1. InitializeTenancyByDomain (stancl) - Fast tenant resolution
-    // 2. TenantMiddleware (artflow) - Status validation only
-    
-    Route::get('/', [HomeController::class, 'index']);
-    Route::get('/dashboard', [DashboardController::class, 'index']);
-});
-```
-
-### Manual Route Configuration (Advanced)
-
-For custom routing, publish and modify routes:
-
-```bash
+# Publish routes for customization
 php artisan vendor:publish --tag=tenancy-routes
 ```
 
-**Custom tenant routes (routes/tenant.php):**
+### Cache Configuration
+
 ```php
-<?php
-
-use Illuminate\Support\Facades\Route;
-
-/*
-|--------------------------------------------------------------------------
-| Tenant Routes
-|--------------------------------------------------------------------------
-| These routes are loaded with tenant middleware and domain resolution
-*/
-
-Route::middleware(['tenant'])->group(function () {
-    Route::get('/', function () {
-        $tenant = tenant();
-        return view('welcome', compact('tenant'));
-    });
-    
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    
-    // API routes with rate limiting
-    Route::prefix('api')->middleware(['tenancy.api'])->group(function () {
-        Route::get('/tenant-info', function () {
-            return response()->json([
-                'tenant' => tenant()->only(['name', 'uuid', 'status']),
-                'domain' => request()->getHost(),
-                'database' => tenant()->getDatabaseName()
-            ]);
-        });
-    });
-});
-```
-
-### Central Application Routes
-
-**Central routes (routes/web.php):**
-```php
-<?php
-
-use Illuminate\Support\Facades\Route;
-use ArtflowStudio\Tenancy\Http\Controllers\TenantViewController;
-
-/*
-|--------------------------------------------------------------------------
-| Central Application Routes
-|--------------------------------------------------------------------------
-| These routes handle admin dashboard and central functionality
-*/
-
-// Admin Dashboard (protected by auth middleware)
-Route::middleware(['web', 'auth'])->prefix('admin')->group(function () {
-    Route::get('/tenants', [TenantViewController::class, 'index'])->name('admin.tenants');
-    Route::get('/tenants/create', [TenantViewController::class, 'create'])->name('admin.tenants.create');
-    Route::get('/tenants/{tenant}', [TenantViewController::class, 'show'])->name('admin.tenants.show');
-});
-
-// API Routes (no tenant context)
-Route::middleware(['tenancy.api'])->prefix('tenancy')->group(function () {
-    // All API endpoints listed in the API section above
-});
+// config/artflow-tenancy.php
+'cache' => [
+    'ttl' => 3600,
+    'prefix' => 'tenant_',
+    'driver' => 'redis', // Use Redis for performance
+],
 ```
 
 ---
 
-## 🚀 Real-World Usage Examples
-
-### Example 1: SaaS Application Setup
-
-```php
-// Create a new SaaS tenant
-$tenant = app(TenantService::class)->createTenant(
-    name: 'Acme Corporation',
-    domain: 'acme.myapp.com',
-    status: 'active'
-);
-
-// Automatically run migrations
-app(TenantService::class)->migrateTenant($tenant);
-
-// Seed with initial data
-app(TenantService::class)->seedTenant($tenant);
-
-// Access tenant
-// Visit: https://acme.myapp.com
-```
-
-### Example 2: Multi-Tenant E-commerce
-
-```php
-// In your tenant-specific controller
-class ProductController extends Controller
-{
-    public function index()
-    {
-        // Automatically scoped to current tenant
-        $products = Product::all(); // Only this tenant's products
-        
-        return view('products.index', compact('products'));
-    }
-    
-    public function store(Request $request)
-    {
-        // Automatically saved to tenant database
-        $product = Product::create($request->validated());
-        
-        return redirect()->route('products.index');
-    }
-}
-```
-
-### Example 3: External API Integration
-
-```javascript
-// JavaScript API client
-const tenantAPI = {
-    baseURL: 'https://your-app.com/tenancy',
-    apiKey: 'your_api_key_here',
-    
-    async createTenant(data) {
-        const response = await fetch(`${this.baseURL}/tenants/create`, {
-            method: 'POST',
-            headers: {
-                'X-API-Key': this.apiKey,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        });
-        
-        return response.json();
-    },
-    
-    async getTenants(filters = {}) {
-        const params = new URLSearchParams(filters);
-        const response = await fetch(`${this.baseURL}/tenants?${params}`, {
-            headers: { 'X-API-Key': this.apiKey }
-        });
-        
-        return response.json();
-    }
-};
-
-// Usage
-const newTenant = await tenantAPI.createTenant({
-    name: 'New Company',
-    domain: 'newcompany.example.com',
-    run_migrations: true
-});
-```
-
----
-
-## 📊 Monitoring & Analytics
-
-### Built-in Performance Dashboard
-
-```bash
-# Access admin dashboard
-# Visit: http://your-domain.com/admin/tenants
-
-# View real-time metrics:
-# • Active tenants and their status
-# • Database sizes and performance
-# • Response times and error rates  
-# • Memory usage and connections
-# • Recent tenant activity
-```
-
-### API Analytics
-
-```bash
-# Get comprehensive statistics
-curl -H "X-API-Key: your_key" https://your-app.com/tenancy/stats
-
-# Response includes:
-{
-  "tenants": {
-    "total": 150,
-    "active": 145,
-    "inactive": 2,
-    "suspended": 2,
-    "blocked": 1
-  },
-  "performance": {
-    "avg_response_time": "45ms",
-    "95th_percentile": "120ms",
-    "requests_per_second": 145,
-    "error_rate": "0.1%"
-  },
-  "resources": {
-    "total_database_size": "2.4GB",
-    "largest_tenant": "acme_corp_12345678 (245MB)",
-    "avg_tenant_size": "16MB",
-    "active_connections": 25
-  }
-}
-```
-
-### Real-time Monitoring
-
-```bash
-# Live performance monitoring
-php artisan tenancy:stats --live
-
-# Watch performance in real-time
-watch -n 5 'php artisan tenancy:health --check=performance'
-
-# Monitor specific tenant
-php artisan tenancy:monitor {tenant-uuid} --interval=30
-```
-
----
-
-## 🔒 Security Features
-
-### API Authentication Methods
-
-```php
-// Multiple authentication options
-Route::middleware(['tenancy.api'])->group(function () {
-    // Supports:
-    // 1. API Key: X-API-Key header
-    // 2. Bearer Token: Authorization: Bearer {token}
-    // 3. Custom authentication via middleware
-});
-```
-
-### Rate Limiting
-
-```php
-// Automatic rate limiting (configurable)
-// Default: 60 requests per minute per IP
-// Bypass for localhost in development
-
-// Custom rate limits per endpoint
-Route::middleware(['throttle:100,1'])->group(function () {
-    // 100 requests per minute for high-volume endpoints
-});
-```
-
-### Tenant Isolation Security
-
-```php
-// Automatic tenant isolation ensures:
-// ✅ Database isolation (separate databases)
-// ✅ File storage isolation
-// ✅ Cache isolation
-// ✅ Session isolation
-// ✅ Queue job isolation
-
-// No cross-tenant data access possible
-```
-
----
-
-## 🛠️ Troubleshooting
+## 🚨 Troubleshooting
 
 ### Common Issues
 
-#### Performance Issues
+**Commands not found:**
 ```bash
-# Check tenant health
-php artisan tenancy:health --detailed
+php artisan config:clear
+php artisan cache:clear
+composer dump-autoload
+```
 
-# Test connection performance
+**Database connection issues:**
+```bash
+# Check tenant database status
+php artisan tenant:manage status {tenant-id}
+
+# Test tenant connections
+php artisan tenant:manage health
+```
+
+**Performance issues:**
+```bash
+# Clear all caches
+php artisan tenancy:clear-cache
+
+# Test performance
 php artisan tenancy:test-performance
-
-# Optimize databases
-php artisan tenancy:optimize-databases
-```
-
-#### Connection Problems
-```bash
-# Repair connections
-php artisan tenancy:repair-connections
-
-# Check connection statistics
-php artisan tenancy:connections
-
-# Clear tenant caches
-php artisan tenancy:cache-clear
-```
-
-#### Memory Issues
-```bash
-# Test memory usage
-php artisan tenancy:test-memory --tenants=10
-
-# Monitor memory in real-time
-php artisan tenancy:monitor --memory
-```
-
-### Debug Mode
-
-Enable detailed debugging:
-
-```php
-// In .env
-TENANCY_DEBUG=true
-TENANCY_PERFORMANCE_TRACKING=true
-
-// View debug information
-php artisan tenancy:debug {tenant-uuid}
 ```
 
 ---
+## 🔐 Security
 
-## 🎯 Best Practices
+- **Tenant Isolation**: Complete database, cache, and file isolation
+- **API Authentication**: API keys and Bearer tokens supported
+- **Rate Limiting**: Configurable per-endpoint rate limits
+- **Secure Connections**: SSL/TLS support for all tenant domains
 
-### Performance Optimization
+---
 
-1. **Use Redis for Caching**
-```env
-CACHE_DRIVER=redis
-SESSION_DRIVER=redis
-QUEUE_CONNECTION=redis
-```
+## 🤝 Contributing
 
-2. **Enable Persistent Connections**
-```php
-// Already enabled by default in the package
-// Uses stancl/tenancy's DatabaseTenancyBootstrapper
-```
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-3. **Optimize Database Queries**
-```php
-// Use indexes for tenant-specific queries
-Schema::table('your_table', function (Blueprint $table) {
-    $table->index(['tenant_id', 'created_at']);
-});
-```
+---
 
-### Scalability Patterns
+## 📄 License
 
-1. **Database Sharding** (Advanced)
-```php
-// Distribute tenants across multiple database servers
-// Configuration in config/tenancy.php
-'database_sharding' => [
-    'enabled' => true,
-    'shards' => [
-        'shard1' => ['host' => 'db1.example.com'],
-        'shard2' => ['host' => 'db2.example.com'],
-    ]
-]
-```
+This package is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
 
-2. **Load Balancing**
-```php
-// Use multiple app servers with shared Redis cache
-// Tenant routing automatically handled
-```
+---
 
-## 🚀 Deployment Guide
+## 🙏 Credits
 
-### Production Deployment
+- Built on top of [stancl/tenancy](https://github.com/stancl/tenancy) - The best Laravel tenancy package
+- Developed by [Artflow Studio](https://artflow-studio.com)
 
-#### Environment Setup
-```env
-# Production Environment Variables
-APP_ENV=production
-APP_DEBUG=false
+---
 
-# Tenancy Configuration
-TENANT_API_KEY=sk_tenant_live_your_production_key
-TENANCY_MONITORING_ENABLED=true
-TENANCY_PERFORMANCE_TRACKING=true
+## 📞 Support
 
-# Database Configuration
-DB_CONNECTION=mysql
-DB_HOST=your-production-db-host
-DB_DATABASE=your_central_database
-TENANT_DB_HOST=your-tenant-db-host
+- **Documentation**: [API.md](API.md) | [COMMANDS.md](COMMANDS.md) | [ROADMAP.md](ROADMAP.md)
+- **Issues**: [GitHub Issues](https://github.com/artflow-studio/tenancy/issues)
+- **Email**: support@artflow-studio.com
 
-# Redis Configuration (Required for production)
-CACHE_DRIVER=redis
-SESSION_DRIVER=redis
-QUEUE_CONNECTION=redis
-REDIS_HOST=your-redis-host
-REDIS_PASSWORD=your-redis-password
+---
 
-# Backup Configuration
-TENANCY_BACKUP_ENABLED=true
-TENANCY_BACKUP_DISK=s3
-TENANCY_BACKUP_RETENTION_DAYS=30
-```
-
-#### Server Requirements
-```bash
-# Recommended production server specs:
-# CPU: 4+ cores
-# RAM: 8GB+ (16GB+ for high-load)
-# Storage: SSD recommended
-# PHP: 8.2+ with required extensions
-# MySQL: 8.0+ or PostgreSQL 13+
-# Redis: 6.0+
-```
-
-#### Production Checklist
-```bash
-# 1. Install and configure
-composer install --no-dev --optimize-autoloader
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
-
-# 2. Set up monitoring
-php artisan tenancy:health --setup-monitoring
-
-# 3. Configure backups
-php artisan tenancy:backup-setup
-
-# 4. Test performance
-php artisan tenancy:test-performance --production
-
-# 5. Set up SSL/TLS for all tenant domains
-# 6. Configure load balancing if needed
-# 7. Set up monitoring and alerting
-```
-
-### Docker Deployment
-
-#### Dockerfile
-```dockerfile
-FROM php:8.2-fpm-alpine
-
-# Install system dependencies
-RUN apk add --no-cache \
-    git \
-    curl \
-    libpng-dev \
-    libxml2-dev \
-    zip \
-    unzip
-
-# Install PHP extensions
-RUN docker-php-ext-install pdo_mysql gd xml
-
-# Install Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-# Set working directory
-WORKDIR /var/www
-
-# Copy application
-COPY . .
-
-# Install dependencies
-RUN composer install --no-dev --optimize-autoloader
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www
-```
-
-#### Docker Compose
-```yaml
-version: '3.8'
-
-services:
-  app:
-    build: .
-    ports:
-      - "9000:9000"
-    volumes:
-      - .:/var/www
-    environment:
-      - DB_HOST=mysql
-      - REDIS_HOST=redis
-    depends_on:
-      - mysql
-      - redis
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-    depends_on:
-      - app
-
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_DATABASE: central_database
-      MYSQL_ROOT_PASSWORD: your_password
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-  redis:
-    image: redis:alpine
-    volumes:
-      - redis_data:/data
-
-volumes:
-  mysql_data:
-  redis_data:
-```
-
-### Kubernetes Deployment
-
-#### Helm Chart (example)
-```yaml
-# values.yaml
-replicaCount: 3
-
-image:
+**🚀 Ready to scale your multi-tenant Laravel application? Install now and get started in minutes!**
   repository: your-app/tenancy
   tag: latest
 

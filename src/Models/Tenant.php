@@ -108,6 +108,15 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
+     * Get the database name for this tenant.
+     * This method is required by stancl/tenancy and our codebase.
+     */
+    public function getDatabaseName(): string
+    {
+        return 'tenant_' . $this->id;
+    }
+
+    /**
      * Check if tenant is active.
      */
     public function isActive(): bool
@@ -188,7 +197,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
                     'tenant_name' => $this->name,
                     'status' => $this->status,
                     'primary_domain' => $this->getPrimaryDomainName(),
-                    'database_name' => $this->database()->name,
+                    'database_name' => $this->getDatabaseName(),
                     'last_accessed_at' => $this->last_accessed_at?->toISOString(),
                     'created_at' => $this->created_at->toISOString(),
                     'updated_at' => $this->updated_at->toISOString(),

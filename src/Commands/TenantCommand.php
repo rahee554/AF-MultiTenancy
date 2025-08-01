@@ -99,12 +99,13 @@ class TenantCommand extends Command
 
         $headers = ['ID', 'UUID', 'Name', 'Domain', 'Database', 'Status', 'Created'];
         $rows = $tenants->map(function ($tenant) {
+            $primaryDomain = $tenant->domains()->first();
             return [
                 $tenant->id,
-                Str::limit($tenant->uuid, 8) . '...',
+                Str::limit($tenant->id, 8) . '...',
                 $tenant->name,
-                $tenant->domain,
-                $tenant->database_name ?: $tenant->getDatabaseName(),
+                $primaryDomain ? $primaryDomain->domain : 'No domain',
+                $tenant->getDatabaseName(),
                 $tenant->status,
                 $tenant->created_at->format('Y-m-d H:i'),
             ];
@@ -120,7 +121,9 @@ class TenantCommand extends Command
         $tenant = $this->findTenant();
         if (!$tenant) return 1;
 
-        $this->info("Tenant: {$tenant->name} ({$tenant->domain})");
+        $primaryDomain = $tenant->domains()->first();
+        $domainName = $primaryDomain ? $primaryDomain->domain : 'No domain';
+        $this->info("Tenant: {$tenant->name} ({$domainName})");
 
         if (!$this->option('force') && !$this->confirm('Delete this tenant and its database?', false)) {
             $this->info('Deletion cancelled.');
@@ -248,7 +251,7 @@ class TenantCommand extends Command
             return null;
         }
 
-        $tenant = Tenant::where('uuid', $uuid)->first();
+        $tenant = Tenant::where('id', $uuid)->first();
         if (!$tenant) {
             $this->error("Tenant not found: {$uuid}");
             return null;
@@ -259,14 +262,13 @@ class TenantCommand extends Command
 
     private function displayTenantInfo(Tenant $tenant): void
     {
+        $primaryDomain = $tenant->domains()->first();
         $this->table(['Field', 'Value'], [
             ['ID', $tenant->id],
-            ['UUID', $tenant->uuid],
             ['Name', $tenant->name],
-            ['Domain', $tenant->domain],
-            ['Database', $tenant->database_name ?: $tenant->getDatabaseName()],
+            ['Domain', $primaryDomain ? $primaryDomain->domain : 'No domain'],
+            ['Database', $tenant->getDatabaseName()],
             ['Status', $tenant->status],
-            ['Notes', $tenant->notes ?? 'N/A'],
             ['Created', $tenant->created_at->format('Y-m-d H:i:s')],
         ]);
     }

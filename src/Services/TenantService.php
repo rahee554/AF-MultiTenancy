@@ -4,6 +4,7 @@ namespace ArtflowStudio\Tenancy\Services;
 
 use ArtflowStudio\Tenancy\Models\Tenant;
 use ArtflowStudio\Tenancy\Models\Domain;
+use Stancl\Tenancy\Database\Models\Domain as StanclDomain;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
@@ -16,47 +17,31 @@ class TenantService
      */
     public function createTenant(string $name, string $domain, string $status = 'active', ?string $customDatabaseName = null, ?string $notes = null, ?string $customPrefix = null): Tenant
     {
-        // Validate domain uniqueness in domains table
-        if (DB::table('domains')->where('domain', $domain)->exists()) {
+        // Validate domain uniqueness using stancl's domain model
+        if (StanclDomain::where('domain', $domain)->exists()) {
             throw new \Exception("Domain '{$domain}' already exists");
         }
 
-        $uuid = (string) Str::uuid();
-        
-        // Use custom database name or generate readable one
-        if ($customDatabaseName) {
-            $databaseName = $customDatabaseName;
-        } else {
-            // Allow custom prefix or use environment default
-            $prefix = $customPrefix ?? env('TENANT_DB_PREFIX', 'tenant_');
-            $cleanName = preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower($name));
-            $databaseName = $prefix . $cleanName . '_' . substr($uuid, 0, 8);
-        }
-        
-        // Create tenant record (without domain)
-        $id = DB::table('tenants')->insertGetId([
-            'uuid' => $uuid,
+        // Create tenant using stancl/tenancy approach
+        $tenant = Tenant::create([
+            'id' => (string) Str::uuid(),
             'name' => $name,
-            'database_name' => $databaseName,
             'status' => $status,
-            'notes' => $notes ?: 'Created via system',
-            'created_at' => now(),
-            'updated_at' => now(),
+            'data' => [
+                'name' => $name,
+                'status' => $status,
+                'notes' => $notes ?: 'Created via system',
+            ],
         ]);
 
-        $tenant = Tenant::find($id);
-        
-        // Create domain record for stancl/tenancy
-        DB::table('domains')->insert([
+        // Create domain for the tenant using stancl's domain model
+        $tenant->domains()->create([
             'domain' => $domain,
-            'tenant_id' => $tenant->id,
-            'created_at' => now(),
-            'updated_at' => now(),
         ]);
-        
-        // Create database
-        $this->createTenantDatabase($tenant->getDatabaseName());
-        
+
+        // The database will be created automatically by stancl/tenancy when needed
+        // No need to manually create the database here
+
         return $tenant;
     }
 
@@ -90,21 +75,16 @@ class TenantService
      */
     public function migrateTenant(Tenant $tenant, bool $fresh = false): void
     {
-        // Use stancl/tenancy's proper database switching
-        tenancy()->initialize($tenant);
-
-        try {
+        $tenant->run(function () use ($fresh) {
             $command = $fresh ? 'migrate:fresh' : 'migrate';
             
             // Run tenant-specific migrations using stancl's connection
             Artisan::call($command, [
-                '--database' => 'tenant', // stancl uses 'tenant' connection automatically
-                '--path' => 'database/migrations/tenant',
                 '--force' => true,
+                '--path' => [database_path('migrations/tenant')],
+                '--realpath' => true,
             ]);
-        } finally {
-            tenancy()->end();
-        }
+        });
     }
 
     /**
@@ -112,17 +92,12 @@ class TenantService
      */
     public function seedTenant(Tenant $tenant): void
     {
-        // Use stancl/tenancy's proper database switching
-        tenancy()->initialize($tenant);
-
-        try {
+        $tenant->run(function () {
             Artisan::call('db:seed', [
+                '--class' => 'DatabaseSeeder',
                 '--force' => true,
-                '--database' => 'tenant', // stancl uses 'tenant' connection automatically
             ]);
-        } finally {
-            tenancy()->end();
-        }
+        });
     }
 
     /**

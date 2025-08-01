@@ -6,7 +6,7 @@ return [
     'tenant_model' => \ArtflowStudio\Tenancy\Models\Tenant::class,
     'id_generator' => \Stancl\Tenancy\UUIDGenerator::class,
 
-    'domain_model' => \Stancl\Tenancy\Database\Models\Domain::class,
+    'domain_model' => \ArtflowStudio\Tenancy\Models\Domain::class,
 
     'central_domains' => [
         '127.0.0.1',
