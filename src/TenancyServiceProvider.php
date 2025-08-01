@@ -21,8 +21,8 @@ class TenancyServiceProvider extends ServiceProvider
             return new TenantService();
         });
 
-        // Merge package config with stancl/tenancy config
-        $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'tenancy');
+        // Register separate artflow config (don't merge with stancl/tenancy)
+        $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
     }
 
     /**
@@ -48,8 +48,22 @@ class TenancyServiceProvider extends ServiceProvider
         // Register publishables
         $this->registerPublishables();
 
+        // Auto-setup stancl/tenancy integration
+        $this->configureStanclIntegration();
+
         // Auto-publish and migrate on package install
         $this->autoSetup();
+    }
+
+    /**
+     * Configure proper stancl/tenancy integration
+     */
+    protected function configureStanclIntegration(): void
+    {
+        // Ensure stancl/tenancy uses our enhanced Tenant model
+        config([
+            'tenancy.tenant_model' => \ArtflowStudio\Tenancy\Models\Tenant::class,
+        ]);
     }
 
     /**

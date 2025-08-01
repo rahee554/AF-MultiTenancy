@@ -1,9 +1,10 @@
 {
     "name": "artflow-studio/tenancy",
-    "description": "A comprehensive multi-tenant Laravel package with admin dashboard and domain management",
-    "version": "0.3.0",
+    "description": "High-performance multi-tenant Laravel package with optimized architecture, admin dashboard, and comprehensive tenant management",
+    "version": "0.4.1",
     "type": "library",
     "license": "MIT",
+    "keywords": ["laravel", "multi-tenant", "tenancy", "saas", "domain", "database", "artflow"],
     "authors": [
         {
             "name": "Artflow Studio",
@@ -12,12 +13,13 @@
     ],
     "minimum-stability": "stable",
     "require": {
-        "php": "^8.0",
-        "illuminate/support": "*",
-        "stancl/tenancy": "*"
+        "php": "^8.1",
+        "illuminate/support": "^10.0|^11.0",
+        "stancl/tenancy": "^3.7"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.0",
+        "orchestra/testbench": "^8.0|^9.0"
     },
     "autoload": {
         "psr-4": {
@@ -38,5 +40,10 @@
     },
     "config": {
         "sort-packages": true
+    },
+    "homepage": "https://github.com/artflow-studio/tenancy",
+    "support": {
+        "issues": "https://github.com/artflow-studio/tenancy/issues",
+        "source": "https://github.com/artflow-studio/tenancy"
     }
 }

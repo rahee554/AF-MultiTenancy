@@ -5,14 +5,16 @@ namespace ArtflowStudio\Tenancy\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
+use ArtflowStudio\Tenancy\Models\Tenant;
 
 class TenantMiddleware
 {
     /**
-     * Handle an incoming request.
-     * This middleware combines tenancy initialization and database switching.
+     * Enhanced tenant middleware that properly integrates with stancl/tenancy.
+     * 
+     * This middleware performs tenant status validation BEFORE stancl/tenancy
+     * handles database switching, providing optimal performance and proper
+     * integration with the stancl/tenancy ecosystem.
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -25,38 +27,50 @@ class TenantMiddleware
             abort(404, 'Business features are only available on tenant domains.');
         }
 
-        // Initialize tenancy using stancl/tenancy
-        app(\Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class)
-            ->handle($request, function ($request) {
-                // Do nothing here - just initialize tenancy
-            });
-
-        // If tenancy was initialized, switch to tenant database and check status
-        if (tenancy()->initialized) {
-            $tenant = tenant();
+        // Get tenant by domain for status checking (without initializing tenancy yet)
+        $tenant = $this->getTenantByDomain($currentDomain);
+        
+        if ($tenant) {
+            // Check tenant status BEFORE expensive tenancy initialization
+            $status = $tenant->status ?? 'active';
             
-            if ($tenant) {
-                // Check tenant status first
-                switch ($tenant->status ?? 'active') {
-                    case 'blocked':
-                        return response()->view('errors.tenant-blocked', ['tenant' => $tenant], 403);
-                        
-                    case 'suspended':
-                        return response()->view('errors.tenant-suspended', ['tenant' => $tenant], 503);
-                        
-                    case 'inactive':
-                        return response()->view('errors.tenant-inactive', ['tenant' => $tenant], 503);
-                }
-                
-                // Switch to tenant database if status is active
-                if (isset($tenant->database_name)) {
-                    Config::set('database.connections.mysql.database', $tenant->database_name);
-                    DB::purge('mysql');
-                    DB::reconnect('mysql');
-                }
+            switch ($status) {
+                case 'blocked':
+                    return response()->view('errors.tenant-blocked', ['tenant' => $tenant], 403);
+                    
+                case 'suspended':
+                    return response()->view('errors.tenant-suspended', ['tenant' => $tenant], 503);
+                    
+                case 'inactive':
+                    return response()->view('errors.tenant-inactive', ['tenant' => $tenant], 503);
+                    
+                case 'maintenance':
+                    return response()->view('errors.tenant-maintenance', ['tenant' => $tenant], 503);
             }
         }
 
+        // If tenant is active or status check passed, let stancl/tenancy handle
+        // database switching and tenant initialization via DatabaseTenancyBootstrapper
+        // This ensures proper connection management and optimal performance
+        
         return $next($request);
+    }
+    
+    /**
+     * Get tenant by domain without initializing full tenancy context.
+     * This is optimized for status checking only.
+     */
+    protected function getTenantByDomain(string $domain): ?Tenant
+    {
+        try {
+            return Tenant::query()
+                ->whereHas('domains', function ($query) use ($domain) {
+                    $query->where('domain', $domain);
+                })
+                ->first();
+        } catch (\Exception $e) {
+            // If there's any issue with tenant lookup, let stancl handle it
+            return null;
+        }
     }
 }
