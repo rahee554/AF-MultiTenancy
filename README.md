@@ -5,11 +5,19 @@
 [![License](https://img.shields.io/packagist/l/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![Performance](https://img.shields.io/badge/performance-optimized-brightgreen.svg?style=flat-square)](#performance-benchmarks)
 
-**Version: 1.0.0 - Enterprise-Grade Multi-Tenancy Solution**
+**Version: 0.6.0 - Central Domain Support & Smart Domain Resolution**
 
 🚀 **High-Performance Laravel Multi-Tenancy** - Built on top of `stancl/tenancy` with comprehensive database isolation, performance optimizations, and **100% tenant isolation** with enterprise features.
 
 ## ✅ **Current Status - PRODUCTION READY**
+
+**🏆 NEW IN v0.6.0 - CENTRAL DOMAIN SUPPORT:**
+- ✅ **Smart Domain Resolution** - Automatic routing between central and tenant domains
+- ✅ **Central Domain Middleware** - No more "Tenant not found" errors on 127.0.0.1/localhost
+- ✅ **Mixed Environment Support** - Admin dashboards on central, tenant content on tenant domains
+- ✅ **Zero Configuration Required** - Works out of the box with sensible defaults
+- ✅ **100% Backward Compatible** - All existing routes continue to work unchanged
+- ✅ **Performance Optimized** - Central domains bypass tenant resolution entirely
 
 **🏆 ENTERPRISE FEATURES:**
 - ✅ **100% Database Isolation** - Complete tenant separation with UUID-based databases
@@ -989,6 +997,48 @@ $tenantService->resetTenantDatabase($tenantUuid);
 
 // Migrate all tenants
 $tenantService->migrateAllTenants();
+```
+
+## 🔀 Routing & Middleware
+
+### Available Middleware
+
+The package provides three middleware options for different routing needs:
+
+#### 1. **Smart Domain Resolver** (`smart.domain`)
+Automatically routes between central and tenant domains:
+
+```php
+// In your routes/web.php - handles both central and tenant domains
+Route::middleware(['web', 'smart.domain'])->group(function () {
+    Route::get('/dashboard', [DashboardController::class, 'index']);
+    Route::get('/profile', [ProfileController::class, 'show']);
+    // These routes work on both central and tenant domains
+});
+```
+
+#### 2. **Central Domain Only** (`central.tenant`)
+Restricts routes to central domain only:
+
+```php
+// In your routes/api.php - central domain only
+Route::middleware(['api', 'central.tenant'])->prefix('api')->group(function () {
+    Route::get('/health', [HealthController::class, 'check']);
+    Route::post('/admin/tenants', [AdminController::class, 'createTenant']);
+    // Only accessible from central domains (127.0.0.1, localhost, APP_DOMAIN)
+});
+```
+
+#### 3. **Traditional Tenant** (`tenant`)
+Standard tenant-only routes:
+
+```php
+// In your routes/tenant.php - tenant domains only
+Route::middleware(['tenant'])->group(function () {
+    Route::get('/tenant-dashboard', [TenantController::class, 'dashboard']);
+    Route::resource('customers', CustomerController::class);
+    // Only accessible from tenant domains
+});
 ```
 
 ### Using Tenant Middleware

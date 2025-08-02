@@ -24,6 +24,43 @@ $middleware = config('artflow-tenancy.middleware', [
 ]);
 
 // ========================================
+// CENTRAL DOMAIN ROUTES (127.0.0.1, localhost, etc.)
+// ========================================
+
+Route::middleware(['central'])
+    ->group(function () {
+        
+        // Central domain homepage
+        Route::get('/', function () {
+            return view('welcome'); // Default Laravel welcome page
+        })->name('central.home');
+        
+        // Central domain dashboard and admin routes
+        Route::view('dashboard', 'dashboard')
+            ->middleware(['auth', 'verified'])
+            ->name('central.dashboard');
+            
+        // Authentication routes (should be on central domain)
+        Route::middleware(['auth'])->group(function () {
+            Route::redirect('settings', 'settings/profile');
+            Route::get('settings/profile', \App\Livewire\Settings\Profile::class)->name('central.settings.profile');
+            Route::get('settings/password', \App\Livewire\Settings\Password::class)->name('central.settings.password');
+            Route::get('settings/appearance', \App\Livewire\Settings\Appearance::class)->name('central.settings.appearance');
+        });
+        
+        // Central domain API health endpoint
+        Route::get('api/health', function () {
+            return response()->json([
+                'status' => 'OK',
+                'timestamp' => now(),
+                'domain' => request()->getHost(),
+                'type' => 'central',
+                'tenancy_system' => 'operational'
+            ]);
+        })->name('central.api.health');
+    });
+
+// ========================================
 // API ROUTES - Tenant Management
 // ========================================
 
