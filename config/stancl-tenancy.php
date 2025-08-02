@@ -37,6 +37,13 @@ return [
             'sqlite' => \Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager::class,
         ],
         
+        // ===== CACHED LOOKUP PERFORMANCE OPTIMIZATION =====
+        'cached_lookup' => [
+            'enabled' => env('TENANCY_CACHED_LOOKUP', true),
+            'ttl' => env('TENANCY_CACHE_TTL', 3600), // 1 hour
+            'store' => env('TENANCY_CACHE_STORE', 'redis'), // Use Redis for best performance
+        ],
+        
         'connection_override' => [
             'template_tenant_connection' => [
                 'driver' => env('DB_CONNECTION', 'mysql'),

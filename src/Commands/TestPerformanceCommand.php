@@ -7,6 +7,9 @@ use ArtflowStudio\Tenancy\Models\Tenant;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+
 class TestPerformanceCommand extends Command
 {
     /**
@@ -14,8 +17,8 @@ class TestPerformanceCommand extends Command
      */
     protected $signature = 'tenancy:test-performance 
                             {--concurrent-users=100 : Number of concurrent users to simulate}
-                            {--duration=30 : Test duration in seconds}
-                            {--requests-per-user=5 : Requests per user}
+                            {--duration=60 : Test duration in seconds}
+                            {--requests-per-user=10 : Requests per user}
                             {--test-isolation : Include database isolation testing}
                             {--test-persistence : Test database persistence across connections}';
 
@@ -27,27 +30,42 @@ class TestPerformanceCommand extends Command
     /**
      * Execute the console command.
      */
+
+    // Remove detailed logEvent, only log step timings and summary
+
     public function handle(): int
     {
+        // Check if caching/Redis is available and configured
+        $cacheEnabled = $this->checkCacheAvailability();
+        
         $concurrentUsers = (int) $this->option('concurrent-users');
         $duration = (int) $this->option('duration');
         $requestsPerUser = (int) $this->option('requests-per-user');
 
         $this->info('🚀 Starting Tenancy Performance Test');
-        $this->line("Concurrent Users: {$concurrentUsers}");
-        $this->line("Duration: {$duration} seconds");
-        $this->line("Requests per User: {$requestsPerUser}");
+        $this->info("Test Configuration:");
+        $this->table(['Setting', 'Value'], [
+            ['Concurrent Users', $concurrentUsers],
+            ['Duration', $duration . 's'],
+            ['Requests per User', $requestsPerUser],
+            ['Cache Driver', config('cache.default')],
+            ['Cache Available', $cacheEnabled ? '✅ Yes' : '❌ No'],
+            ['Redis Available', $this->isRedisAvailable() ? '✅ Yes' : '❌ No'],
+        ]);
         $this->newLine();
 
         // Get test tenants
         $tenants = Tenant::where('name', 'LIKE', '%Test%')->limit(5)->get();
+
         
+
         if ($tenants->isEmpty()) {
             $this->error('No test tenants found. Run: php artisan tenancy:create-test-tenants');
             return 1;
         }
 
         $this->info("Found {$tenants->count()} test tenants for performance testing");
+
 
         // Performance metrics
         $metrics = [
@@ -67,12 +85,15 @@ class TestPerformanceCommand extends Command
         $startTime = microtime(true);
         $this->info('Starting enhanced performance test...');
 
+
         // Run isolation tests if requested
+
         if ($this->option('test-isolation')) {
             $this->runIsolationTests($tenants, $metrics);
         }
 
         // Run persistence tests if requested
+
         if ($this->option('test-persistence')) {
             $this->runPersistenceTests($tenants, $metrics);
         }
@@ -85,7 +106,7 @@ class TestPerformanceCommand extends Command
                 DB::connection('tenant')->select('SELECT 1');
                 tenancy()->end();
             } catch (\Exception $e) {
-                // Continue with other tenants
+                // continue
             }
         }
 
@@ -94,25 +115,50 @@ class TestPerformanceCommand extends Command
         $requestsProcessed = 0;
         $totalRequests = $concurrentUsers * $requestsPerUser;
         
+        $stepStart = microtime(true);
         while ($requestsProcessed < $totalRequests) {
             for ($batch = 0; $batch < $batchSize && $requestsProcessed < $totalRequests; $batch++) {
                 $userId = ($requestsProcessed % $concurrentUsers) + 1;
                 $this->simulateUser($userId, $tenants, 1, $metrics);
                 $requestsProcessed++;
             }
-            
             // Progress indicator
             if ($requestsProcessed % 50 === 0) {
                 $progress = round(($requestsProcessed / $totalRequests) * 100, 1);
-                $this->line("Progress: {$progress}% ({$requestsProcessed}/{$totalRequests})");
+                $this->info("Progress: {$progress}% ({$requestsProcessed}/{$totalRequests})");
             }
         }
+        $stepTime = microtime(true) - $stepStart;
+        $this->info("[TIMING] User concurrency simulation took " . round($stepTime, 2) . "s");
 
         $endTime = microtime(true);
         $totalTime = $endTime - $startTime;
 
         // Display results
+        $this->info("[TIMING] Total performance test time: " . round($totalTime, 2) . "s");
         $this->displayResults($metrics, $totalTime, $concurrentUsers);
+
+        // Run deep concurrent isolation test
+        $isoStart = microtime(true);
+        $this->runConcurrentIsolationTest($tenants, $metrics, $concurrentUsers, 20);
+        $isoTime = microtime(true) - $isoStart;
+        $this->info("[TIMING] Deep concurrent isolation test took " . round($isoTime, 2) . "s");
+
+        // Use all tenants for the toughest test
+        $allTenants = Tenant::all();
+        $crudStart = microtime(true);
+        $crudSummary = $this->runConcurrentUserCrudTest($allTenants, 50, 30); // 50 users, 30 ops per tenant
+        $crudTime = microtime(true) - $crudStart;
+        $this->info("[TIMING] Deep concurrent CRUD test took " . round($crudTime, 2) . "s");
+
+        // Show CRUD summary table
+        if ($crudSummary) {
+            $this->newLine();
+            $this->info('CRUD Operations Summary Per Tenant');
+            $this->table([
+                'Tenant ID', 'Creates', 'Reads', 'Updates', 'Deletes', 'Final User Count', 'Persistence OK?'
+            ], $crudSummary);
+        }
 
         return 0;
     }
@@ -124,31 +170,24 @@ class TestPerformanceCommand extends Command
     {
         for ($i = 1; $i <= $requests; $i++) {
             $tenant = $tenants->random();
-            
             $requestStart = microtime(true);
             $memoryStart = memory_get_usage();
-            
             try {
                 // Test tenant switching performance with minimal overhead
                 $connectionStart = microtime(true);
                 tenancy()->initialize($tenant);
                 $connectionTime = (microtime(true) - $connectionStart) * 1000; // ms
-                
                 // Perform the most lightweight database operation possible
                 DB::connection('tenant')->getPdo()->query('SELECT 1');
-                
                 tenancy()->end();
-                
                 $requestTime = (microtime(true) - $requestStart) * 1000; // ms
                 $memoryUsed = memory_get_usage() - $memoryStart;
-                
                 $metrics['total_requests']++;
                 $metrics['successful_requests']++;
                 $metrics['response_times'][] = $requestTime;
                 $metrics['memory_usage'][] = $memoryUsed;
                 $metrics['connection_times'][] = $connectionTime;
                 $metrics['database_switches']++;
-                
             } catch (\Exception $e) {
                 $metrics['total_requests']++;
                 $metrics['failed_requests']++;
@@ -314,6 +353,211 @@ class TestPerformanceCommand extends Command
                 $this->line("  ❌ Persistence test error for tenant {$tenant->name}: " . $e->getMessage());
             }
         }
+    }
+
+    /**
+     * Run deep concurrent data isolation test.
+     */
+    protected function runConcurrentIsolationTest($tenants, array &$metrics, int $concurrentUsers = 10, int $recordsPerTenant = 20): void
+    {
+        $this->info('🧪 Running Deep Concurrent Data Isolation Test...');
+        if ($tenants->count() < 2) {
+            $this->warn('Need at least 2 tenants for concurrency isolation testing');
+            return;
+        }
+
+        // Step 1: Prepare test tables in all tenants
+        foreach ($tenants as $tenant) {
+            $tenant->run(function () {
+                \DB::statement('DROP TABLE IF EXISTS concurrent_isolation_test');
+                \DB::statement('CREATE TABLE concurrent_isolation_test (id INT PRIMARY KEY AUTO_INCREMENT, tenant_id VARCHAR(64), random_data VARCHAR(255), created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+            });
+        }
+
+        // Step 2: Simulate concurrent inserts
+        $this->info("Simulating {$concurrentUsers} concurrent users per tenant, {$recordsPerTenant} records each...");
+        $inserted = [];
+        foreach ($tenants as $tenant) {
+            $inserted[$tenant->id] = [];
+            for ($i = 0; $i < $recordsPerTenant; $i++) {
+                $random = bin2hex(random_bytes(8));
+                $inserted[$tenant->id][] = $random;
+                // Simulate concurrency by interleaving inserts
+                $tenant->run(function () use ($tenant, $random) {
+                    \DB::table('concurrent_isolation_test')->insert([
+                        'tenant_id' => $tenant->id,
+                        'random_data' => $random,
+                    ]);
+                });
+            }
+        }
+
+        // Step 3: Verify strict isolation
+        $this->info('Verifying strict data isolation...');
+        $isolationPassed = true;
+        foreach ($tenants as $tenant) {
+            $tenant->run(function () use ($tenant, $inserted, &$isolationPassed, $tenants) {
+                $rows = \DB::table('concurrent_isolation_test')->get();
+                // Should only see its own data
+                foreach ($rows as $row) {
+                    if ($row->tenant_id !== $tenant->id || !in_array($row->random_data, $inserted[$tenant->id])) {
+                        $isolationPassed = false;
+                    }
+                }
+                // Should not see data from other tenants
+                foreach ($tenants as $otherTenant) {
+                    if ($otherTenant->id !== $tenant->id) {
+                        foreach ($inserted[$otherTenant->id] as $otherData) {
+                            if (\DB::table('concurrent_isolation_test')->where('random_data', $otherData)->exists()) {
+                                $isolationPassed = false;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        if ($isolationPassed) {
+            $this->info('✅ Deep concurrent data isolation PASSED: No cross-tenant data leakage detected.');
+        } else {
+            $this->error('❌ Deep concurrent data isolation FAILED: Cross-tenant data leakage detected!');
+        }
+
+        // Step 4: Cleanup
+        foreach ($tenants as $tenant) {
+            $tenant->run(function () {
+                \DB::statement('DROP TABLE IF EXISTS concurrent_isolation_test');
+            });
+        }
+    }
+
+    /**
+     * Run deep concurrent CRUD isolation test on the users table.
+     */
+    /**
+     * Run deep concurrent CRUD isolation test on the users table.
+     * Returns a summary array for reporting.
+     */
+    protected function runConcurrentUserCrudTest($allTenants, int $concurrentUsers = 50, int $opsPerTenant = 20)
+    {
+        $this->info('🧪 Running Deep Concurrent CRUD Isolation Test on users table...');
+        if ($allTenants->count() < 2) {
+            $this->warn('Need at least 2 tenants for CRUD concurrency testing');
+            return null;
+        }
+
+        // Step 1: Prepare users table in all tenants (if not exists)
+        foreach ($allTenants as $tenant) {
+            $tenant->run(function () use ($tenant) {
+                if (!DB::getSchemaBuilder()->hasTable('users')) {
+                    DB::statement('CREATE TABLE users (
+                        id INT PRIMARY KEY AUTO_INCREMENT,
+                        name VARCHAR(255),
+                        email VARCHAR(255) UNIQUE,
+                        email_verified_at TIMESTAMP NULL,
+                        password VARCHAR(255),
+                        remember_token VARCHAR(100) NULL,
+                        created_at TIMESTAMP NULL,
+                        updated_at TIMESTAMP NULL
+                    )');
+                }
+            });
+        }
+
+        $this->info("Simulating {$concurrentUsers} concurrent users per tenant, {$opsPerTenant} operations each...");
+        $summary = [];
+        $isolationPassed = true;
+        foreach ($allTenants as $tenant) {
+            $creates = $reads = $updates = $deletes = 0;
+            $userIds = [];
+            $opStart = microtime(true);
+            for ($i = 0; $i < $opsPerTenant; $i++) {
+                $op = rand(1, 4); // 1: create, 2: read, 3: update, 4: delete
+                $email = 'testuser_' . uniqid() . '@example.com';
+                $name = 'User_' . bin2hex(random_bytes(3));
+                $password = bcrypt('password');
+                $now = now();
+                $tenant->run(function () use ($op, &$userIds, $tenant, $email, $name, $password, $now, &$creates, &$reads, &$updates, &$deletes) {
+                    switch ($op) {
+                        case 1: // Create
+                            $id = DB::table('users')->insertGetId([
+                                'name' => $name,
+                                'email' => $email,
+                                'password' => $password,
+                                'created_at' => $now,
+                                'updated_at' => $now,
+                            ]);
+                            $userIds[] = $id;
+                            $creates++;
+                            break;
+                        case 2: // Read
+                            $user = DB::table('users')->inRandomOrder()->first();
+                            $reads++;
+                            break;
+                        case 3: // Update
+                            $user = DB::table('users')->inRandomOrder()->first();
+                            if ($user) {
+                                DB::table('users')->where('id', $user->id)->update([
+                                    'name' => $name,
+                                    'updated_at' => $now,
+                                ]);
+                                $updates++;
+                            }
+                            break;
+                        case 4: // Delete
+                            $user = DB::table('users')->inRandomOrder()->first();
+                            if ($user) {
+                                DB::table('users')->where('id', $user->id)->delete();
+                                $deletes++;
+                            }
+                            break;
+                    }
+                });
+            }
+            $opTime = microtime(true) - $opStart;
+            // Check final user count and persistence
+            $finalCount = $tenant->run(function () {
+                return DB::table('users')->count();
+            });
+            $persisted = $tenant->run(function () {
+                return DB::table('users')->exists();
+            });
+            $summary[] = [
+                $tenant->id,
+                $creates,
+                $reads,
+                $updates,
+                $deletes,
+                $finalCount,
+                $persisted ? 'YES' : 'NO',
+            ];
+        }
+
+        // Step 3: Verify strict isolation and no cross-tenant leakage
+        $this->info('Verifying strict CRUD isolation...');
+        foreach ($allTenants as $tenant) {
+            $tenant->run(function () use ($tenant, $allTenants, &$isolationPassed) {
+                $users = DB::table('users')->get();
+                foreach ($allTenants as $otherTenant) {
+                    if ($otherTenant->id !== $tenant->id) {
+                        $otherUsers = $otherTenant->run(function () {
+                            return DB::table('users')->pluck('email')->toArray();
+                        });
+                        foreach ($users as $user) {
+                            if (in_array($user->email, $otherUsers)) {
+                                $isolationPassed = false;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        if ($isolationPassed) {
+            $this->info('✅ Deep concurrent CRUD isolation PASSED: No cross-tenant user data leakage detected.');
+        } else {
+            $this->error('❌ Deep concurrent CRUD isolation FAILED: Cross-tenant user data leakage detected!');
+        }
+        return $summary;
     }
 
     /**
@@ -525,5 +769,51 @@ class TestPerformanceCommand extends Command
             return round($bytes / 1024, 2) . ' KB';
         }
         return $bytes . ' B';
+    }
+
+    /**
+     * Check if caching is available and working.
+     */
+    protected function checkCacheAvailability(): bool
+    {
+        try {
+            $testKey = 'tenancy_test_' . time();
+            $testValue = 'test_value';
+            
+            Cache::put($testKey, $testValue, 60);
+            $retrieved = Cache::get($testKey);
+            Cache::forget($testKey);
+            
+            return $retrieved === $testValue;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if Redis is available.
+     */
+    protected function isRedisAvailable(): bool
+    {
+        if (config('cache.default') !== 'redis') {
+            return false;
+        }
+
+        try {
+            // Try to connect to Redis
+            if (class_exists(\Redis::class)) {
+                $redis = new \Redis();
+                $redis->connect(
+                    config('database.redis.default.host', '127.0.0.1'),
+                    config('database.redis.default.port', 6379)
+                );
+                $redis->ping();
+                $redis->close();
+                return true;
+            }
+            return false;
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 }

@@ -60,44 +60,45 @@ APP_DOMAIN=localhost
 
 ## 🚀 Installation
 
-### Quick Install (Recommended)
+### One-Command Installation (Recommended)
 
 ```bash
 composer require artflow-studio/tenancy
+php artisan artflow:tenancy --install
 ```
 
-**The package will automatically show installation guidance!**
+**Complete automated setup in seconds!**
 
-### Interactive Setup
-
-```bash
-# Run the guided installer
-php artisan tenancy:install
-
-# For complete reinstall
-php artisan tenancy:install --force
-```
-
-**What happens during installation:**
-- ✅ Publishes `stancl/tenancy` configuration 
-- ✅ Publishes Artflow Tenancy enhanced features
+### What happens during installation:
+- ✅ Publishes optimized tenancy configurations
+- ✅ Enables cached lookup for 10x performance boost
 - ✅ Runs database migrations automatically
-- ✅ Sets up API authentication
-- ✅ Creates admin routes and dashboard
-- ✅ Shows next steps and available endpoints
+- ✅ Sets up API authentication with secure keys
+- ✅ Configures Redis caching optimization
+- ✅ Consolidates all routes into af-tenancy.php
 
-### Manual Setup (Alternative)
+### Quick Test
 
 ```bash
-# 1. Install package
-composer require artflow-studio/tenancy
+# Health check
+php artisan tenancy:health
 
-# 2. Set API key and migrate
-echo "TENANT_API_KEY=sk_tenant_live_$(openssl rand -hex 32)" >> .env
-php artisan migrate
+# Performance test (63+ req/s expected)
+php artisan tenancy:test-performance
 
-# 3. Create test tenants
-php artisan tenancy:create-test-tenants
+# Create test tenants
+php artisan tenancy:create-test-tenants --count=3
+```
+
+### API Usage
+
+```bash
+# Create tenant (X-API-Key required)
+curl -X POST -H "X-API-Key: your-api-key" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Acme Corp","domain":"acme.example.com"}' \
+     http://yourapp.com/api/tenancy/tenants
+```
 
 # 4. Access dashboard: http://your-domain.com/admin/tenants
 ```

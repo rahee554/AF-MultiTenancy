@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 class TenantCommand extends Command
 {
     protected $signature = 'tenant:manage
-                            {action : The action to perform (create, list, delete, activate, deactivate, migrate, seed, status)}
+                            {action? : The action to perform (create, list, delete, activate, deactivate, migrate, seed, status)}
                             {--tenant= : Tenant UUID for actions on specific tenant}
                             {--name= : Tenant name}
                             {--domain= : Tenant domain}
@@ -34,6 +34,34 @@ class TenantCommand extends Command
     public function handle()
     {
         $action = $this->argument('action');
+        $actions = [
+            'create' => 'Create a new tenant',
+            'list' => 'List all tenants',
+            'delete' => 'Delete a tenant',
+            'activate' => 'Activate a tenant',
+            'deactivate' => 'Deactivate a tenant',
+            'migrate' => 'Run migrations for a tenant',
+            'migrate-all' => 'Run migrations for all active tenants',
+            'seed' => 'Run seeders for a tenant',
+            'seed-all' => 'Run seeders for all active tenants',
+            'status' => 'Show tenant status',
+            'health' => 'Check system health'
+        ];
+
+        if (!$action) {
+            $this->info('🚀 Tenant Management System');
+            $this->info('Available actions:');
+            $this->newLine();
+            foreach ($actions as $cmd => $desc) {
+                $this->info("  <fg=green>{$cmd}</fg=green> - {$desc}");
+            }
+            $this->newLine();
+            $action = $this->choice('Please select an action', array_keys($actions));
+        }
+
+        if (!array_key_exists($action, $actions)) {
+            return $this->showHelp();
+        }
 
         return match ($action) {
             'create' => $this->createTenant(),
@@ -47,7 +75,6 @@ class TenantCommand extends Command
             'seed-all' => $this->seedAllTenants(),
             'status' => $this->showTenantStatus(),
             'health' => $this->checkSystemHealth(),
-            default => $this->showHelp(),
         };
     }
 
@@ -64,11 +91,40 @@ class TenantCommand extends Command
             return 1;
         }
 
+        // Normalize and prefix custom DB name
+        if ($customDb) {
+            $prefix = env('TENANT_DB_PREFIX', 'tenant_');
+            // Replace hyphens, spaces, and other non-alphanumeric chars with underscores
+            $normalized = preg_replace('/[^A-Za-z0-9_]/', '_', $customDb);
+            // Collapse multiple underscores into one
+            $normalized = preg_replace('/_+/', '_', $normalized);
+            // Trim leading/trailing underscores
+            $normalized = trim($normalized, '_');
+            // Add prefix if not already present
+            if (!str_starts_with($normalized, $prefix)) {
+                $normalized = $prefix . $normalized;
+            }
+            $customDb = strtolower($normalized);
+        }
+
         try {
             $tenant = $this->tenantService->createTenant($name, $domain, $status, $customDb, $notes);
 
             $this->info("✅ Tenant created successfully!");
-            $this->displayTenantInfo($tenant);
+            $this->newLine();
+            
+            // Beautiful summary table
+            $primaryDomain = $tenant->domains()->first();
+            $this->table([
+                'Field', 'Value'
+            ], [
+                ['🏢 Tenant Name', $tenant->name],
+                ['🌐 Domain', $primaryDomain ? $primaryDomain->domain : 'No domain'],
+                ['💾 Database', $tenant->getDatabaseName()],
+                ['📊 Status', $tenant->status],
+                ['🆔 UUID', $tenant->id],
+                ['📅 Created', $tenant->created_at->format('Y-m-d H:i:s')],
+            ]);
 
             // Optional migrations and seeding
             if ($this->confirm('Run migrations for this tenant?', true)) {
@@ -276,16 +332,35 @@ class TenantCommand extends Command
     private function checkSystemHealth(): int
     {
         $this->info('🔍 Checking system health...');
+        $this->newLine();
         
         try {
             $health = $this->tenantService->checkSystemHealth();
             
-            $this->info("System Status: " . ($health['status'] === 'healthy' ? '✅ HEALTHY' : '❌ UNHEALTHY'));
+            $overallStatus = $health['status'] === 'healthy' ? '✅ HEALTHY' : '❌ UNHEALTHY';
+            $this->info("🎯 System Status: {$overallStatus}");
             $this->newLine();
             
+            // Create table for health checks
+            $rows = [];
             foreach ($health['checks'] as $check => $result) {
                 $status = $result['status'] === 'ok' ? '✅' : '❌';
-                $this->info("{$status} {$check}: {$result['message']}");
+                $rows[] = [
+                    $check,
+                    $status,
+                    $result['message']
+                ];
+            }
+            
+            $this->table(['Component', 'Status', 'Details'], $rows);
+            
+            // Add summary info
+            if (isset($health['summary'])) {
+                $this->newLine();
+                $this->info('📊 Summary:');
+                foreach ($health['summary'] as $key => $value) {
+                    $this->info("   {$key}: {$value}");
+                }
             }
             
             return $health['status'] === 'healthy' ? 0 : 1;

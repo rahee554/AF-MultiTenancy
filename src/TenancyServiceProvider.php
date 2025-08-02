@@ -10,6 +10,7 @@ use ArtflowStudio\Tenancy\Commands\CreateTestTenantsCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
 use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
 use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
+use ArtflowStudio\Tenancy\Commands\InstallTenancyCommand;
 use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 
@@ -84,6 +85,7 @@ class TenancyServiceProvider extends ServiceProvider
                 TestPerformanceCommand::class,
                 HealthCheckCommand::class,
                 ComprehensiveTenancyTestCommand::class,
+                InstallTenancyCommand::class,
             ]);
         }
 
@@ -92,6 +94,9 @@ class TenancyServiceProvider extends ServiceProvider
         
         // Register middleware
         $this->registerMiddleware();
+        
+        // Configure cached lookup for performance
+        $this->configureCachedLookup();
         
         // Auto-setup if needed
         $this->autoSetup();
@@ -126,11 +131,37 @@ class TenancyServiceProvider extends ServiceProvider
      */
     protected function loadRoutes(): void
     {
-        // Load web routes for admin interface
-        $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
+        // Load consolidated tenancy routes
+        $this->loadRoutesFrom(__DIR__ . '/../routes/af-tenancy.php');
+    }
+
+    /**
+     * Configure cached lookup for performance optimization
+     */
+    protected function configureCachedLookup(): void
+    {
+        $config = config('tenancy.database.cached_lookup', [
+            'enabled' => true,
+            'ttl' => 3600,
+            'store' => 'redis',
+        ]);
         
-        // Load API routes
-        $this->loadRoutesFrom(__DIR__ . '/../routes/api.php');
+        if ($config['enabled']) {
+            // Enable cached lookup on domain resolver
+            \Stancl\Tenancy\Resolvers\DomainTenantResolver::$shouldCache = true;
+            \Stancl\Tenancy\Resolvers\DomainTenantResolver::$cacheTTL = $config['ttl'];
+            \Stancl\Tenancy\Resolvers\DomainTenantResolver::$cacheStore = $config['store'];
+            
+            // Enable cached lookup on path resolver
+            \Stancl\Tenancy\Resolvers\PathTenantResolver::$shouldCache = true;
+            \Stancl\Tenancy\Resolvers\PathTenantResolver::$cacheTTL = $config['ttl'];
+            \Stancl\Tenancy\Resolvers\PathTenantResolver::$cacheStore = $config['store'];
+            
+            // Enable cached lookup on request data resolver
+            \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$shouldCache = true;
+            \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$cacheTTL = $config['ttl'];
+            \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$cacheStore = $config['store'];
+        }
     }
 
     /**
