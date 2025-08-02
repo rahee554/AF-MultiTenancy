@@ -40,13 +40,6 @@ Route::middleware(['central'])
             ->middleware(['auth', 'verified'])
             ->name('central.dashboard');
             
-        // Authentication routes (should be on central domain)
-        Route::middleware(['auth'])->group(function () {
-            Route::redirect('settings', 'settings/profile');
-            Route::get('settings/profile', \App\Livewire\Settings\Profile::class)->name('central.settings.profile');
-            Route::get('settings/password', \App\Livewire\Settings\Password::class)->name('central.settings.password');
-            Route::get('settings/appearance', \App\Livewire\Settings\Appearance::class)->name('central.settings.appearance');
-        });
         
         // Central domain API health endpoint
         Route::get('api/health', function () {

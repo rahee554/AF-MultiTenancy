@@ -162,8 +162,6 @@ return [
         // API Key for X-API-Key header authentication
         'api_key' => env('TENANCY_API_KEY'),
         
-        // Bearer token for Authorization: Bearer {token} authentication
-        'bearer_token' => env('TENANCY_BEARER_TOKEN'),
         
         // Disable all API authentication (for development/internal use)
         'no_auth' => env('TENANCY_API_NO_AUTH', false),

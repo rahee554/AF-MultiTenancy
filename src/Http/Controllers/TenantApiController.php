@@ -16,19 +16,19 @@ class TenantApiController extends Controller
     public function __construct(TenantService $tenantService)
     {
         $this->tenantService = $tenantService;
-        
-        // Simple API key middleware check
+
+        // API key middleware check (only via api_key param in query/body)
         $this->middleware(function ($request, $next) {
-            $apiKey = $request->header('X-API-Key') ?? $request->input('api_key');
+            $apiKey = $request->input('api_key');
             $expectedKey = config('artflow-tenancy.api.api_key');
-            
+
             if (!$apiKey || $apiKey !== $expectedKey) {
                 return response()->json([
-                    'error' => 'Unauthorized. Valid X-API-Key header required.',
+                    'error' => 'Unauthorized. Valid api_key parameter required.',
                     'code' => 401
                 ], 401);
             }
-            
+
             return $next($request);
         });
     }
@@ -166,7 +166,7 @@ class TenantApiController extends Controller
     {
         try {
             $tenant = Tenant::findOrFail($id);
-            
+
             $validated = $request->validate([
                 'name' => 'sometimes|string|max:255',
                 'status' => 'sometimes|in:active,inactive',
@@ -177,7 +177,7 @@ class TenantApiController extends Controller
             foreach ($validated as $key => $value) {
                 $data[$key] = $value;
             }
-            
+
             $tenant->update(['data' => $data]);
 
             return response()->json([
