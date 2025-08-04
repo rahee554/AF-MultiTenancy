@@ -115,6 +115,14 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     }
 
     /**
+     * Scope to only get active tenants
+     */
+    public function scopeActive($query)
+    {
+        return $query->where('status', 'active');
+    }
+
+    /**
      * Get the database name for this tenant
      * First checks custom 'database' column, then falls back to prefix + tenant key (without hyphens)
      */

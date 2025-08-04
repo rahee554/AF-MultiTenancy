@@ -458,6 +458,58 @@ class TenantViewController extends Controller
         ];
     }
 
+    /**
+     * Handle tenant homepage display
+     */
+    public function tenantHomepage(Request $request)
+    {
+        // Get current tenant using stancl/tenancy service container binding
+        $tenant = null;
+        try {
+            $tenant = app('tenant');
+        } catch (\Exception $e) {
+            // No tenant context available, redirect to fallback
+            $fallbackRedirect = config('artflow-tenancy.homepage.fallback_redirect', '/login');
+            return redirect($fallbackRedirect);
+        }
+
+        if (!$tenant || !method_exists($tenant, 'hasHomepage')) {
+            $fallbackRedirect = config('artflow-tenancy.homepage.fallback_redirect', '/login');
+            return redirect($fallbackRedirect);
+        }
+
+        // If tenant doesn't have homepage enabled, redirect to configured fallback
+        if (!$tenant->hasHomepage()) {
+            $fallbackRedirect = config('artflow-tenancy.homepage.fallback_redirect', '/login');
+            return redirect($fallbackRedirect);
+        }
+
+        // If tenant has homepage, try to load custom homepage view
+        $domain = $request->getHost();
+        $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
+        $customViewPath = "{$viewPath}.{$domain}.home";
+        
+        // Check if custom tenant homepage view exists
+        if (view()->exists($customViewPath)) {
+            return view($customViewPath, [
+                'tenant' => $tenant,
+                'domain' => $domain
+            ]);
+        }
+        
+        // Fallback to default tenant homepage if exists
+        if (view()->exists("{$viewPath}.home")) {
+            return view("{$viewPath}.home", [
+                'tenant' => $tenant,
+                'domain' => $domain
+            ]);
+        }
+
+        // If no homepage views exist, redirect to fallback
+        $fallbackRedirect = config('artflow-tenancy.homepage.fallback_redirect', '/login');
+        return redirect($fallbackRedirect);
+    }
+
     private function getTotalConnections(): int { return 4; }
     private function getPersistentConnections(): int { return 2; }
     private function getCacheSize(): string { return '15.2 MB'; }

@@ -57,12 +57,18 @@ class TenantService
 
             DB::commit();
             
+            // Auto-create homepage view if enabled
+            if ($hasHomepage && config('artflow-tenancy.homepage.auto_create_directory', true)) {
+                $this->createHomepageView($domain);
+            }
+            
             // Log success
             Log::info("Tenant created successfully", [
                 'tenant_id' => $tenant->id,
                 'name' => $name,
                 'domain' => $domain,
                 'database' => $databaseName,
+                'has_homepage' => $hasHomepage,
             ]);
 
             return $tenant;
