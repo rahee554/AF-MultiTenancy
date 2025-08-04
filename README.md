@@ -1,102 +1,155 @@
-# 🏢 Artflow Studio Tenancy Package
+# 🏢 AF-MultiTenancy Package
 
 [![Latest Version](https://img.shields.io/packagist/v/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![Total Downloads](https://img.shields.io/packagist/dt/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![License](https://img.shields.io/packagist/l/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
-[![Performance](https://img.shields.io/badge/performance-optimized-brightgreen.svg?style=flat-square)](#performance-benchmarks)
 
-**Version: 0.6.0 - Central Domain Support & Smart Domain Resolution**
+**Version: 0.6.5** - The most practical Laravel multi-tenancy package
 
-🚀 **High-Performance Laravel Multi-Tenancy** - Built on top of `stancl/tenancy` with comprehensive database isolation, performance optimizations, and **100% tenant isolation** with enterprise features.
+🚀 **High-Performance Laravel Multi-Tenancy** - Built on top of `stancl/tenancy` with enhanced features, homepage management, and 100% tenant isolation.
 
-## ✅ **Current Status - PRODUCTION READY**
+## ✨ Key Features
 
-**🏆 NEW IN v0.6.0 - CENTRAL DOMAIN SUPPORT:**
-- ✅ **Smart Domain Resolution** - Automatic routing between central and tenant domains
-- ✅ **Central Domain Middleware** - No more "Tenant not found" errors on 127.0.0.1/localhost
-- ✅ **Mixed Environment Support** - Admin dashboards on central, tenant content on tenant domains
-- ✅ **Zero Configuration Required** - Works out of the box with sensible defaults
-- ✅ **100% Backward Compatible** - All existing routes continue to work unchanged
-- ✅ **Performance Optimized** - Central domains bypass tenant resolution entirely
+- 🏢 **Complete Database Isolation** - Each tenant gets its own database
+- 🏠 **Homepage Management** - Enable/disable tenant homepages with smart redirection
+- 🌐 **Smart Domain Resolution** - Automatic routing between central and tenant domains
+- 🗄️ **Custom Database Names** - User-defined database names with validation
+- 📊 **Real-time Monitoring** - Built-in performance metrics and health checks
+- 🔧 **Zero Configuration** - Works out of the box with sensible defaults
+- 🚀 **High Performance** - Optimized for 100+ concurrent tenants
+- 📱 **Complete REST API** - Full tenant management via API
+- ⚡ **One-Command Setup** - Install everything with a single command
 
-**🏆 ENTERPRISE FEATURES:**
-- ✅ **100% Database Isolation** - Complete tenant separation with UUID-based databases
-- ✅ **High Performance** - 46+ req/s with database switching, optimized for 100+ concurrent tenants
-- ✅ **Event-Driven Architecture** - Complete tenancy lifecycle management
-- ✅ **Performance Monitoring** - Built-in health checks and performance analysis
-- ✅ **stancl/tenancy Integration** - Full compatibility with enhanced features
-- ✅ **Laravel 11.x Support** - Latest Laravel integration with optimizations
-- ✅ **Connection Pooling** - Persistent connections and optimized database management
+## 🚀 Quick Start
 
-**📦 COMPLETE PACKAGE CONSOLIDATION:**
-- ✅ All configurations moved to package directory
-- ✅ Comprehensive documentation included
-- ✅ Installation guides and stubs provided
-- ✅ Performance analysis and monitoring tools
+### Installation
 
----
+```bash
+composer require artflow-studio/tenancy
+php artisan af-tenancy:install
+```
 
-## 📋 **Quick Environment Setup**
+### Environment Setup
 
-Add these to your `.env` file:
+Add to your `.env` file:
 
 ```env
-# Tenant Database Configuration
+# Database Configuration
 TENANT_DB_PREFIX=tenant_
 TENANT_DB_CONNECTION=mysql
 TENANT_DB_HOST=127.0.0.1
 TENANT_DB_PORT=3306
 TENANT_DB_USERNAME=root
 TENANT_DB_PASSWORD=
-TENANT_DB_CHARSET=utf8mb4
-TENANT_DB_COLLATION=utf8mb4_unicode_ci
-TENANT_DB_PERSISTENT=true
 
-# Tenant API Security
-TENANT_API_KEY=sk_tenant_live_kjchiqgtsela047mb31vrwf25xop9ny8
-TENANCY_API_KEY=sk_tenant_live_kjchiqgtsela047mb31vrwf25xop9ny8
-TENANCY_BEARER_TOKEN=bearer_kjchiqgtsela047mb31vrwf25xop9ny8
-
-# Performance & Configuration
-TENANT_AUTO_MIGRATE=true
-TENANT_AUTO_SEED=false
-CACHE_DRIVER=array
-APP_DOMAIN=localhost
+# API Security
+TENANT_API_KEY=your-secure-api-key-here
 ```
 
----
-
-## 🚀 Installation
-
-### One-Command Installation (Recommended)
+### Create Your First Tenant
 
 ```bash
-composer require artflow-studio/tenancy
-php artisan artflow:tenancy --install
+php artisan tenant:manage create
 ```
 
-**Complete automated setup in seconds!**
+The interactive prompts will guide you through:
+- Tenant name
+- Domain name
+- Custom database name (or auto-generate)
+- Homepage preference (enable/disable)
 
-### What happens during installation:
-- ✅ Publishes optimized tenancy configurations
-- ✅ Enables cached lookup for 10x performance boost
-- ✅ Runs database migrations automatically
-- ✅ Sets up API authentication with secure keys
-- ✅ Configures Redis caching optimization
-- ✅ Consolidates all routes into af-tenancy.php
+## 🏠 Homepage Management
 
-### Quick Test
+AF-MultiTenancy includes smart homepage management:
+
+- **Homepage Enabled**: Tenant sees their homepage at root `/`
+- **Homepage Disabled**: Tenant is redirected to `/login`
+- **Interactive Setup**: Choose during tenant creation
+- **Runtime Control**: Toggle anytime without restart
+
+### CLI Management
+```bash
+# Enable homepage for a tenant
+php artisan tenant:manage enable-homepage
+
+# Disable homepage for a tenant
+php artisan tenant:manage disable-homepage
+```
+
+### API Management
+```bash
+# Enable homepage via API
+POST /api/tenants/{id}/enable-homepage?api_key=your-key
+
+# Disable homepage via API
+POST /api/tenants/{id}/disable-homepage?api_key=your-key
+```
+
+## 📚 Documentation
+
+- **[Installation Guide](docs/INSTALLATION.md)** - Detailed setup instructions
+- **[API Documentation](docs/API.md)** - Complete REST API reference  
+- **[Commands Guide](docs/COMMANDS.md)** - CLI command reference
+- **[Central Domain Guide](docs/CENTRAL_DOMAIN_GUIDE.md)** - Central domain setup
+- **[Roadmap](docs/ROADMAP.md)** - Development roadmap and future plans
+- **[Architecture Guide](docs/COMPREHENSIVE_IMPLEMENTATION_REPORT.md)** - Technical architecture
+
+## 🔧 Quick Commands
 
 ```bash
-# Health check
+# Install package
+php artisan af-tenancy:install
+
+# Manage tenants
+php artisan tenant:manage
+
+# Check system health
 php artisan tenancy:health
 
-# Performance test (63+ req/s expected)
+# Run performance tests
 php artisan tenancy:test-performance
 
 # Create test tenants
 php artisan tenancy:create-test-tenants --count=3
 ```
+
+## 🎯 What Makes It Special
+
+### Built for Developers
+- **One-command installation** with interactive setup
+- **Intuitive CLI commands** with helpful prompts
+- **Clear documentation** with practical examples
+- **Laravel-native** design patterns
+
+### Production Ready
+- **100% tenant isolation** - No data leaks possible
+- **High performance** - Handles 100+ tenants efficiently
+- **Real-time monitoring** - Track performance and health
+- **Secure by default** - Production-ready security
+
+### Smart Features
+- **Homepage management** - Control tenant landing pages
+- **Custom database names** - Flexible naming with validation
+- **Smart domain routing** - Handles central and tenant domains
+- **Automatic cleanup** - No manual database management
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This package is licensed under the [MIT License](LICENSE).
+
+## 🆘 Support
+
+- **Documentation**: Check the `/docs` folder for detailed guides
+- **Issues**: Report bugs on [GitHub Issues](https://github.com/your-repo/issues)
+- **Discussions**: Join the community [GitHub Discussions](https://github.com/your-repo/discussions)
+
+---
+
+**AF-MultiTenancy** - Making Laravel multi-tenancy simple, secure, and scalable.
 
 ### API Usage
 

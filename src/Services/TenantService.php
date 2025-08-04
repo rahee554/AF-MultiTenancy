@@ -21,7 +21,8 @@ class TenantService
         string $domain,
         string $status = 'active',
         ?string $customDatabase = null,
-        ?string $notes = null
+        ?string $notes = null,
+        bool $hasHomepage = false
     ): Tenant {
         try {
             // Generate unique tenant ID
@@ -42,6 +43,7 @@ class TenantService
                 'name' => $name,
                 'database' => $customDatabase, // Store custom name if provided
                 'status' => $status,
+                'has_homepage' => $hasHomepage,
                 'data' => [
                     'notes' => $notes,
                 ],
@@ -273,29 +275,27 @@ class TenantService
                     
                     // Check if database has recent activity (last 24 hours)
                     try {
-                        config(['database.connections.tenant.database' => $tenant->getDatabaseName()]);
-                        DB::purge('tenant');
-                        DB::reconnect('tenant');
-                        
-                        // Simple check for recent activity - look for updated records
-                        $hasRecentActivity = false;
-                        $tables = ['users', 'businesses', 'customers', 'orders', 'invoices'];
-                        
-                        foreach ($tables as $table) {
-                            try {
-                                $recentRecords = DB::connection('tenant')
-                                    ->table($table)
-                                    ->where('updated_at', '>=', now()->subDay())
-                                    ->count();
-                                if ($recentRecords > 0) {
-                                    $hasRecentActivity = true;
-                                    break;
+                        // Use stancl/tenancy's proper tenant context
+                        $tenant->run(function () use (&$hasRecentActivity) {
+                            // Simple check for recent activity - look for updated records
+                            $hasRecentActivity = false;
+                            $tables = ['users', 'businesses', 'customers', 'orders', 'invoices'];
+                            
+                            foreach ($tables as $table) {
+                                try {
+                                    $recentRecords = DB::table($table)
+                                        ->where('updated_at', '>=', now()->subDay())
+                                        ->count();
+                                    if ($recentRecords > 0) {
+                                        $hasRecentActivity = true;
+                                        break;
+                                    }
+                                } catch (\Exception $e) {
+                                    // Table might not exist, continue
+                                    continue;
                                 }
-                            } catch (\Exception $e) {
-                                // Table might not exist, continue
-                                continue;
                             }
-                        }
+                        });
                         
                         if (!$hasRecentActivity) {
                             $idleDatabases++;
@@ -369,12 +369,19 @@ class TenantService
             } else {
                 // Check if database has tables (migrations ran)
                 try {
-                    // Temporarily switch to tenant database to check tables
-                    config(['database.connections.tenant.database' => $databaseName]);
-                    DB::purge('tenant');
-                    DB::reconnect('tenant');
+                    // Find the tenant and use proper stancl/tenancy context
+                    $tenant = Tenant::where('database', $databaseName)->first();
+                    if (!$tenant) {
+                        $tenant = Tenant::where('id', str_replace('tenant_', '', $databaseName))->first();
+                    }
                     
-                    $tableCount = count(DB::connection('tenant')->select('SHOW TABLES'));
+                    if ($tenant) {
+                        $tenant->run(function () use (&$tableCount) {
+                            $tableCount = count(DB::select('SHOW TABLES'));
+                        });
+                    } else {
+                        $tableCount = 0;
+                    }
                     
                     if ($tableCount === 0) {
                         $failedDatabases++;

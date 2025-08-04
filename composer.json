@@ -1,7 +1,7 @@
 {
     "name": "artflow-studio/tenancy",
     "description": "A comprehensive multi-tenant Laravel package with admin dashboard and domain management. Optimized for performance with proper stancl/tenancy integration.",
-    "version": "0.6.1",
+    "version": "0.6.5",
     "type": "library",
     "license": "MIT",
     "authors": [

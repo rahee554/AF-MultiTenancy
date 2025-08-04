@@ -11,12 +11,12 @@ class InstallTenancyCommand extends Command
     /**
      * The name and signature of the console command.
      */
-    protected $signature = 'artflow:tenancy {--install : Install the complete tenancy package}';
+    protected $signature = 'af-tenancy:install';
 
     /**
      * The console command description.
      */
-    protected $description = 'Install Artflow Studio Tenancy package with complete setup';
+    protected $description = 'Install AF-Tenancy package with complete setup';
 
     /**
      * Execute the console command.

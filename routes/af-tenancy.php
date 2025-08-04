@@ -76,6 +76,8 @@ Route::prefix('api/tenancy')
         Route::post('tenants/{id}/activate', [TenantApiController::class, 'activate']);
         Route::post('tenants/{id}/deactivate', [TenantApiController::class, 'deactivate']);
         Route::post('tenants/{id}/migrate', [TenantApiController::class, 'migrate']);
+        Route::post('tenants/{id}/enable-homepage', [TenantApiController::class, 'enableHomepage']);
+        Route::post('tenants/{id}/disable-homepage', [TenantApiController::class, 'disableHomepage']);
         
         // Real-time monitoring endpoints
         Route::get('monitor/performance', [RealTimeMonitoringController::class, 'performance']);

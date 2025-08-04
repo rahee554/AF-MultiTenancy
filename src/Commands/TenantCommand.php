@@ -10,12 +10,13 @@ use Illuminate\Support\Str;
 class TenantCommand extends Command
 {
     protected $signature = 'tenant:manage
-                            {action? : The action to perform (create, list, delete, activate, deactivate, migrate, seed, status)}
+                            {action? : The action to perform (create, list, delete, activate, deactivate, enable-homepage, disable-homepage, migrate, seed, status)}
                             {--tenant= : Tenant UUID for actions on specific tenant}
                             {--name= : Tenant name}
                             {--domain= : Tenant domain}
                             {--database= : Custom database name}
                             {--status=active : Tenant status}
+                            {--homepage : Enable homepage for tenant}
                             {--notes= : Tenant notes}
                             {--force : Force action without confirmation}
                             {--seed : Run seeders after migration}
@@ -40,6 +41,8 @@ class TenantCommand extends Command
             'delete' => 'Delete a tenant',
             'activate' => 'Activate a tenant',
             'deactivate' => 'Deactivate a tenant',
+            'enable-homepage' => 'Enable homepage for a tenant',
+            'disable-homepage' => 'Disable homepage for a tenant',
             'migrate' => 'Run migrations for a tenant',
             'migrate-all' => 'Run migrations for all active tenants',
             'seed' => 'Run seeders for a tenant',
@@ -69,6 +72,8 @@ class TenantCommand extends Command
             'delete' => $this->deleteTenant(),
             'deactivate' => $this->deactivateTenant(),
             'activate' => $this->activateTenant(),
+            'enable-homepage' => $this->enableHomepage(),
+            'disable-homepage' => $this->disableHomepage(),
             'migrate' => $this->migrateTenant(),
             'migrate-all' => $this->migrateAllTenants(),
             'seed' => $this->seedTenant(),
@@ -82,8 +87,17 @@ class TenantCommand extends Command
     {
         $name = $this->option('name') ?: $this->ask('Tenant name');
         $domain = $this->option('domain') ?: $this->ask('Tenant domain');
-        $status = $this->option('status') ?: 'active';
+        
+        // Ask for database name
         $customDb = $this->option('database');
+        if (!$customDb) {
+            $customDb = $this->ask('Database name (leave empty for auto-generated)', null);
+        }
+        
+        // Ask for homepage
+        $hasHomepage = $this->option('homepage') || $this->confirm('Does this tenant have a homepage?', false);
+        
+        $status = $this->option('status') ?: 'active';
         $notes = $this->option('notes');
 
         if (!$name || !$domain) {
@@ -92,7 +106,7 @@ class TenantCommand extends Command
         }
 
         // Normalize and prefix custom DB name
-        if ($customDb) {
+        if ($customDb && strtolower($customDb) !== 'null') {
             $prefix = env('TENANT_DB_PREFIX', 'tenant_');
             // Replace hyphens, spaces, and other non-alphanumeric chars with underscores
             $normalized = preg_replace('/[^A-Za-z0-9_]/', '_', $customDb);
@@ -105,10 +119,12 @@ class TenantCommand extends Command
                 $normalized = $prefix . $normalized;
             }
             $customDb = strtolower($normalized);
+        } else {
+            $customDb = null; // Will auto-generate
         }
 
         try {
-            $tenant = $this->tenantService->createTenant($name, $domain, $status, $customDb, $notes);
+            $tenant = $this->tenantService->createTenant($name, $domain, $status, $customDb, $notes, $hasHomepage);
 
             $this->info("✅ Tenant created successfully!");
             $this->newLine();
@@ -121,6 +137,7 @@ class TenantCommand extends Command
                 ['🏢 Tenant Name', $tenant->name],
                 ['🌐 Domain', $primaryDomain ? $primaryDomain->domain : 'No domain'],
                 ['💾 Database', $tenant->getDatabaseName()],
+                ['🏠 Homepage', $tenant->hasHomepage() ? 'Enabled' : 'Disabled'],
                 ['📊 Status', $tenant->status],
                 ['🆔 UUID', $tenant->id],
                 ['📅 Created', $tenant->created_at->format('Y-m-d H:i:s')],
@@ -153,7 +170,7 @@ class TenantCommand extends Command
             return 0;
         }
 
-        $headers = ['ID', 'UUID', 'Name', 'Domain', 'Database', 'Status', 'Created'];
+        $headers = ['ID', 'UUID', 'Name', 'Domain', 'Database', 'Homepage', 'Status', 'Created'];
         $rows = $tenants->map(function ($tenant) {
             $primaryDomain = $tenant->domains()->first();
             return [
@@ -162,6 +179,7 @@ class TenantCommand extends Command
                 $tenant->name,
                 $primaryDomain ? $primaryDomain->domain : 'No domain',
                 $tenant->getDatabaseName(),
+                $tenant->hasHomepage() ? '✅ Yes' : '❌ No',
                 $tenant->status,
                 $tenant->created_at->format('Y-m-d H:i'),
             ];
@@ -214,6 +232,38 @@ class TenantCommand extends Command
         $this->tenantService->deactivateTenant($tenant);
         $this->info("✅ Tenant '{$tenant->name}' deactivated!");
         return 0;
+    }
+
+    private function enableHomepage(): int
+    {
+        $tenant = $this->findTenant();
+        if (!$tenant) return 1;
+
+        try {
+            $tenant->enableHomepage();
+            $this->info("✅ Homepage enabled for tenant '{$tenant->name}'!");
+            $this->info("   Tenant will now show homepage at root URL");
+            return 0;
+        } catch (\Exception $e) {
+            $this->error("Failed to enable homepage: {$e->getMessage()}");
+            return 1;
+        }
+    }
+
+    private function disableHomepage(): int
+    {
+        $tenant = $this->findTenant();
+        if (!$tenant) return 1;
+
+        try {
+            $tenant->disableHomepage();
+            $this->info("✅ Homepage disabled for tenant '{$tenant->name}'!");
+            $this->info("   Tenant will now redirect to /login from root URL");
+            return 0;
+        } catch (\Exception $e) {
+            $this->error("Failed to disable homepage: {$e->getMessage()}");
+            return 1;
+        }
     }
 
     private function migrateTenant(): int

@@ -22,6 +22,7 @@ return new class extends Migration
             $table->string('name')->nullable(); // Make nullable to work with stancl/tenancy
             $table->string('database')->unique()->nullable(); //
             $table->enum('status', ['active', 'inactive', 'blocked'])->default('active');
+            $table->boolean('has_homepage')->default(false);
             $table->timestamp('last_accessed_at')->nullable();
             $table->json('settings')->nullable();
 

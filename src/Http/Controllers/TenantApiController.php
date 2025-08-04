@@ -287,4 +287,58 @@ class TenantApiController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Enable homepage for a tenant
+     */
+    public function enableHomepage(string $id): JsonResponse
+    {
+        try {
+            $tenant = Tenant::findOrFail($id);
+            $tenant->enableHomepage();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Homepage enabled successfully for tenant',
+                'data' => [
+                    'tenant_id' => $tenant->id,
+                    'has_homepage' => $tenant->has_homepage,
+                    'tenant_name' => $tenant->data['name'] ?? 'Unknown'
+                ],
+                'timestamp' => now()->toISOString()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Disable homepage for a tenant
+     */
+    public function disableHomepage(string $id): JsonResponse
+    {
+        try {
+            $tenant = Tenant::findOrFail($id);
+            $tenant->disableHomepage();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Homepage disabled successfully for tenant',
+                'data' => [
+                    'tenant_id' => $tenant->id,
+                    'has_homepage' => $tenant->has_homepage,
+                    'tenant_name' => $tenant->data['name'] ?? 'Unknown'
+                ],
+                'timestamp' => now()->toISOString()
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

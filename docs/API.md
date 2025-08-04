@@ -428,6 +428,48 @@ POST /tenancy/tenants/{tenant_id}/migrate
 }
 ```
 
+### Enable Tenant Homepage
+```http
+POST /tenancy/tenants/{tenant_id}/enable-homepage
+```
+
+**Description:** Enables the homepage for a tenant, allowing them to see their custom homepage at the root URL.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Homepage enabled successfully for tenant",
+  "data": {
+    "tenant_id": "uuid-here",
+    "has_homepage": true,
+    "tenant_name": "Example Tenant"
+  },
+  "timestamp": "2024-01-15T10:30:00.000000Z"
+}
+```
+
+### Disable Tenant Homepage
+```http
+POST /tenancy/tenants/{tenant_id}/disable-homepage
+```
+
+**Description:** Disables the homepage for a tenant, redirecting them to the login page instead.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Homepage disabled successfully for tenant",
+  "data": {
+    "tenant_id": "uuid-here",
+    "has_homepage": false,
+    "tenant_name": "Example Tenant"
+  },
+  "timestamp": "2024-01-15T10:30:00.000000Z"
+}
+```
+
 ### Seed Tenant Database
 ```http
 POST /tenancy/tenants/{tenant_id}/seed

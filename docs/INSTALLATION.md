@@ -1,4 +1,4 @@
-# 🚀 Artflow Studio Tenancy - Installation Guide
+# 🚀 AF-MultiTenancy - Installation Guide
 
 Complete installation guide for the high-performance Laravel multi-tenancy package.
 
@@ -11,7 +11,7 @@ Complete installation guide for the high-performance Laravel multi-tenancy packa
 composer require artflow-studio/tenancy
 
 # Run the complete installation
-php artisan artflow:tenancy --install
+php artisan af-tenancy:install
 ```
 
 **That's it!** The command will automatically:
@@ -109,7 +109,7 @@ curl -H "X-API-Key: your-api-key" http://yourapp.com/api/tenancy/tenants
 
 ```bash
 # Installation
-php artisan artflow:tenancy --install
+php artisan af-tenancy:install
 
 # Health & Testing
 php artisan tenancy:health

@@ -24,6 +24,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
         'name',
         'database',
         'status', 
+        'has_homepage',
         'last_accessed_at',
         'settings',
     ];
@@ -34,6 +35,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     protected $casts = [
         'data' => 'array',
         'settings' => 'array',
+        'has_homepage' => 'boolean',
         'last_accessed_at' => 'datetime',
     ];
 
@@ -46,6 +48,7 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'name',
             'database',
             'status',
+            'has_homepage',
             'last_accessed_at',
             'settings',
         ]);
@@ -73,6 +76,30 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    /**
+     * Check if tenant has homepage enabled
+     */
+    public function hasHomepage(): bool
+    {
+        return $this->has_homepage === true;
+    }
+
+    /**
+     * Enable homepage for tenant
+     */
+    public function enableHomepage(): void
+    {
+        $this->update(['has_homepage' => true]);
+    }
+
+    /**
+     * Disable homepage for tenant
+     */
+    public function disableHomepage(): void
+    {
+        $this->update(['has_homepage' => false]);
     }
 
     /**

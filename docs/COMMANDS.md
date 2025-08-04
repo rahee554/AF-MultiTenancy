@@ -73,6 +73,20 @@ php artisan tenant:manage deactivate --tenant=uuid-here
 php artisan tenant:manage status --tenant=uuid-here
 ```
 
+#### **Homepage Management**
+```bash
+# Enable homepage for a tenant
+php artisan tenant:manage enable-homepage --tenant=uuid-here
+
+# Disable homepage for a tenant  
+php artisan tenant:manage disable-homepage --tenant=uuid-here
+
+# Interactive homepage management (will prompt for tenant selection)
+php artisan tenant:manage enable-homepage
+
+php artisan tenant:manage disable-homepage
+```
+
 #### **Delete Tenant**
 ```bash
 # Delete with confirmation
@@ -189,6 +203,8 @@ php artisan tenant:manage health
 | `tenant:manage seed` | Seed single tenant | `--tenant` |
 | `tenant:manage seed-all` | Seed all tenants | None |
 | `tenant:manage status` | Show tenant status | `--tenant` |
+| `tenant:manage enable-homepage` | Enable tenant homepage | `--tenant` |
+| `tenant:manage disable-homepage` | Disable tenant homepage | `--tenant` |
 | `tenant:manage health` | System health check | None |
 | `tenancy:create-test-tenants` | Create test tenants | `--count`, `--domain-prefix`, `--with-data`, `--load-test` |
 | `tenancy:test-performance` | Performance testing | `--concurrent-users`, `--duration`, `--requests-per-user` |

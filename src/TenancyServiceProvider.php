@@ -15,6 +15,7 @@ use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolver;
+use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -116,11 +117,13 @@ class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('tenancy.api', ApiAuthMiddleware::class);
         $router->aliasMiddleware('central.tenant', CentralDomainMiddleware::class);
         $router->aliasMiddleware('smart.domain', SmartDomainResolver::class);
+        $router->aliasMiddleware('homepage.redirect', HomepageRedirectMiddleware::class);
         
         // Register middleware group for tenant routes
         $router->middlewareGroup('tenant', [
             \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
             TenantMiddleware::class,
+            HomepageRedirectMiddleware::class,
         ]);
         
         // Register central domain middleware group
