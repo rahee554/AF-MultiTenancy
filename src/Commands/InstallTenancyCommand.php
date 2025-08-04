@@ -39,20 +39,24 @@ class InstallTenancyCommand extends Command
             $this->info('📋 Step 3: Publishing documentation and stubs...');
             $this->publishDocumentation();
             
-            // Step 4: Update environment file
-            $this->info('📋 Step 4: Updating environment configuration...');
+            // Step 4: Update database configuration
+            $this->info('📋 Step 4: Updating database configuration...');
+            $this->updateDatabaseConfiguration();
+            
+            // Step 5: Update environment file
+            $this->info('📋 Step 5: Updating environment configuration...');
             $this->updateEnvironment();
             
-            // Step 5: Run migrations
-            $this->info('📋 Step 5: Running migrations...');
+            // Step 6: Run migrations
+            $this->info('📋 Step 6: Running migrations...');
             $this->runMigrations();
             
-            // Step 6: Setup cached lookup
-            $this->info('📋 Step 6: Optimizing performance with cached lookup...');
+            // Step 7: Setup cached lookup
+            $this->info('📋 Step 7: Optimizing performance with cached lookup...');
             $this->setupCachedLookup();
             
-            // Step 7: Clear caches
-            $this->info('📋 Step 7: Clearing application caches...');
+            // Step 8: Clear caches
+            $this->info('📋 Step 8: Clearing application caches...');
             $this->clearCaches();
             
             $this->newLine();
@@ -134,6 +138,104 @@ class InstallTenancyCommand extends Command
     }
 
     /**
+     * Update database configuration for tenancy
+     */
+    protected function updateDatabaseConfiguration(): void
+    {
+        $databaseConfigPath = config_path('database.php');
+        
+        if (!File::exists($databaseConfigPath)) {
+            $this->warn('   ⚠️  database.php file not found, skipping database configuration updates');
+            return;
+        }
+        
+        $content = File::get($databaseConfigPath);
+        
+        // Update default connection to mysql
+        if (str_contains($content, "'default' => env('DB_CONNECTION', 'sqlite')")) {
+            $content = str_replace(
+                "'default' => env('DB_CONNECTION', 'sqlite')",
+                "'default' => env('DB_CONNECTION', 'mysql')",
+                $content
+            );
+            $this->line('   ✅ Updated default database connection to MySQL');
+        }
+        
+        // Check if mysql connection already has optimizations
+        if (!str_contains($content, 'PDO::ATTR_PERSISTENT')) {
+            // Replace the simple options array with optimized version
+            $simpleOptionsPattern = "'options' => extension_loaded('pdo_mysql') ? array_filter([\n                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],";
+            
+            $optimizedOptions = "'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                
+                // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
+                
+                // Enable persistent connections for better performance
+                PDO::ATTR_PERSISTENT => env('TENANT_DB_PERSISTENT', true),
+                
+                // Use native prepared statements (faster)
+                PDO::ATTR_EMULATE_PREPARES => false,
+                
+                // Buffer queries for better performance with large result sets
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+                
+                // Connection timeout settings
+                PDO::ATTR_TIMEOUT => env('DB_CONNECTION_TIMEOUT', 5),
+                
+                // Error handling
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                
+                // Default fetch mode
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                
+            ]) : [],";
+            
+            if (str_contains($content, $simpleOptionsPattern)) {
+                $content = str_replace($simpleOptionsPattern, $optimizedOptions, $content);
+                $this->line('   ✅ Added performance optimizations to MySQL connection');
+            } else {
+                // Fallback: look for simpler pattern
+                $fallbackPattern = "PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],";
+                $fallbackReplacement = "PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                
+                // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
+                
+                // Enable persistent connections for better performance
+                PDO::ATTR_PERSISTENT => env('TENANT_DB_PERSISTENT', true),
+                
+                // Use native prepared statements (faster)
+                PDO::ATTR_EMULATE_PREPARES => false,
+                
+                // Buffer queries for better performance with large result sets
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+                
+                // Connection timeout settings
+                PDO::ATTR_TIMEOUT => env('DB_CONNECTION_TIMEOUT', 5),
+                
+                // Error handling
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                
+                // Default fetch mode
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                
+            ]) : [],";
+                
+                if (str_contains($content, $fallbackPattern)) {
+                    $content = str_replace($fallbackPattern, $fallbackReplacement, $content);
+                    $this->line('   ✅ Added performance optimizations to MySQL connection');
+                }
+            }
+        } else {
+            $this->line('   ✅ MySQL performance optimizations already present');
+        }
+        
+        // Write the updated content back to the file
+        File::put($databaseConfigPath, $content);
+        $this->line('   ✅ Database configuration updated successfully');
+    }
+
+    /**
      * Update environment file with tenancy settings
      */
     protected function updateEnvironment(): void
@@ -156,6 +258,9 @@ class InstallTenancyCommand extends Command
             'TENANT_DB_CHARSET' => 'utf8mb4',
             'TENANT_DB_COLLATION' => 'utf8mb4_unicode_ci',
             'TENANT_DB_PERSISTENT' => 'true',
+            
+            // Database Connection Timeout
+            'DB_CONNECTION_TIMEOUT' => '5',
             
             // Migration & Seeding
             'TENANT_AUTO_MIGRATE' => 'false',

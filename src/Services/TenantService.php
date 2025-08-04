@@ -7,6 +7,7 @@ use Stancl\Tenancy\Database\Models\Domain as StanclDomain;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 use Stancl\Tenancy\Facades\Tenancy;
 
@@ -513,107 +514,105 @@ class TenantService
     }
 
     /**
-     * Create homepage directory and view file for a tenant
+     * Create homepage view for a tenant domain
      */
-    public function createHomepageView(string $domain): bool
+    public function createHomepageView(string $domain): void
     {
-        try {
-            // Check if homepage auto-creation is enabled
-            if (!config('artflow-tenancy.homepage.auto_create_directory', true)) {
-                return false;
-            }
+        $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
+        $viewDirectory = resource_path("views/{$viewPath}/{$domain}");
+        $homepageFile = "{$viewDirectory}/home.blade.php";
 
-            $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
-            $resourcePath = resource_path("views/{$viewPath}/{$domain}");
-            
-            // Create directory if it doesn't exist
-            if (!is_dir($resourcePath)) {
-                mkdir($resourcePath, 0755, true);
-                Log::info("Created homepage directory for tenant: {$domain}");
-            }
-            
-            // Create home.blade.php if it doesn't exist
-            $homeFilePath = "{$resourcePath}/home.blade.php";
-            if (!file_exists($homeFilePath)) {
-                $homeContent = $this->getDefaultHomepageContent($domain);
-                file_put_contents($homeFilePath, $homeContent);
-                Log::info("Created homepage view for tenant: {$domain}");
-            }
-            
-            return true;
-        } catch (\Exception $e) {
-            Log::error("Failed to create homepage view for tenant {$domain}: " . $e->getMessage());
-            return false;
+        // Check if directory already exists
+        if (!File::exists($viewDirectory)) {
+            File::makeDirectory($viewDirectory, 0755, true);
+            Log::info("Created homepage view directory: {$viewDirectory}");
+        }
+
+        // Check if homepage file already exists
+        if (!File::exists($homepageFile)) {
+            $homepageContent = $this->getHomepageTemplate($domain);
+            File::put($homepageFile, $homepageContent);
+            Log::info("Created homepage view file: {$homepageFile}");
         }
     }
 
     /**
-     * Remove homepage directory and view file for a tenant
+     * Remove homepage view for a tenant domain
      */
-    public function removeHomepageView(string $domain): bool
+    public function removeHomepageView(string $domain): void
     {
-        try {
-            $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
-            $resourcePath = resource_path("views/{$viewPath}/{$domain}");
-            
-            if (is_dir($resourcePath)) {
-                // Remove all files in the directory
-                $files = glob("{$resourcePath}/*");
-                foreach ($files as $file) {
-                    if (is_file($file)) {
-                        unlink($file);
-                    }
-                }
-                
-                // Remove the directory
-                rmdir($resourcePath);
-                Log::info("Removed homepage directory for tenant: {$domain}");
-            }
-            
-            return true;
-        } catch (\Exception $e) {
-            Log::error("Failed to remove homepage view for tenant {$domain}: " . $e->getMessage());
-            return false;
+        $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
+        $viewDirectory = resource_path("views/{$viewPath}/{$domain}");
+
+        if (File::exists($viewDirectory)) {
+            File::deleteDirectory($viewDirectory);
+            Log::info("Removed homepage view directory: {$viewDirectory}");
         }
     }
 
     /**
-     * Get default homepage content template
+     * Get homepage template content for a domain
      */
-    private function getDefaultHomepageContent(string $domain): string
+    protected function getHomepageTemplate(string $domain): string
     {
-        return <<<BLADE
+        return <<<'BLADE'
 @extends('layouts.app')
 
-@section('title', 'Welcome to {$domain}')
+@section('title', 'Welcome to {{ $tenant->data["name"] ?? "Tenant" }}')
 
 @section('content')
-<div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card">
-                <div class="card-header">
-                    <h4>Welcome to {{ \$tenant->data['name'] ?? '{$domain}' }}</h4>
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white shadow-lg rounded-lg p-8">
+            <div class="text-center mb-8">
+                <h1 class="text-4xl font-bold text-gray-800 mb-4">
+                    Welcome to {{ $tenant->data['name'] ?? 'Your Tenant' }}
+                </h1>
+                <p class="text-xl text-gray-600">
+                    Domain: <strong>{{ $domain }}</strong>
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <div class="bg-blue-50 p-6 rounded-lg">
+                    <h2 class="text-2xl font-semibold text-blue-800 mb-4">🏠 Tenant Information</h2>
+                    <ul class="space-y-2 text-gray-700">
+                        <li><strong>Tenant ID:</strong> {{ $tenant->id }}</li>
+                        <li><strong>Name:</strong> {{ $tenant->data['name'] ?? 'Not set' }}</li>
+                        <li><strong>Status:</strong> 
+                            <span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                                {{ $tenant->data['status'] ?? 'Active' }}
+                            </span>
+                        </li>
+                        <li><strong>Homepage:</strong> 
+                            @if($tenant->hasHomepage())
+                                <span class="text-green-600">✅ Enabled</span>
+                            @else
+                                <span class="text-red-600">❌ Disabled</span>
+                            @endif
+                        </li>
+                    </ul>
                 </div>
-                
-                <div class="card-body">
-                    <h5>Tenant Homepage</h5>
-                    <p>This is the custom homepage for <strong>{{ \$domain }}</strong></p>
-                    
-                    <div class="alert alert-info">
-                        <h6>Tenant Information:</h6>
-                        <ul class="mb-0">
-                            <li><strong>Domain:</strong> {{ \$domain }}</li>
-                            <li><strong>Tenant ID:</strong> {{ \$tenant->id }}</li>
-                            <li><strong>Status:</strong> {{ \$tenant->data['status'] ?? 'active' }}</li>
-                        </ul>
+
+                <div class="bg-green-50 p-6 rounded-lg">
+                    <h2 class="text-2xl font-semibold text-green-800 mb-4">🚀 Quick Actions</h2>
+                    <div class="space-y-3">
+                        <a href="/dashboard" class="block w-full bg-blue-600 text-white text-center py-2 px-4 rounded-lg hover:bg-blue-700 transition">
+                            Go to Dashboard
+                        </a>
+                        <a href="/login" class="block w-full bg-gray-600 text-white text-center py-2 px-4 rounded-lg hover:bg-gray-700 transition">
+                            Sign In
+                        </a>
+                        <a href="/register" class="block w-full bg-green-600 text-white text-center py-2 px-4 rounded-lg hover:bg-green-700 transition">
+                            Create Account
+                        </a>
                     </div>
-                    
-                    <p class="text-muted">
-                        <small>You can customize this page by editing the view file at:<br>
-                        <code>resources/views/tenants/{$domain}/home.blade.php</code></small>
-                    </p>
                 </div>
+            </div>
+
+            <div class="mt-8 text-center text-gray-500">
+                <p>This is a custom homepage for your tenant. You can customize this view at:</p>
+                <code class="bg-gray-100 px-2 py-1 rounded">resources/views/tenants/{{ $domain }}/home.blade.php</code>
             </div>
         </div>
     </div>
