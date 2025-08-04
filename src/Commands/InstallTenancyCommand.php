@@ -162,17 +162,17 @@ class InstallTenancyCommand extends Command
         }
         
         // Check if mysql connection already has optimizations
-        if (!str_contains($content, 'PDO::ATTR_PERSISTENT')) {
-            // Replace the simple options array with optimized version
-            $simpleOptionsPattern = "'options' => extension_loaded('pdo_mysql') ? array_filter([\n                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],";
-
-            $optimizedOptions = "'options' => extension_loaded('pdo_mysql') ? array_filter([
+        if (str_contains($content, 'PDO::ATTR_PERSISTENT')) {
+            $this->line('   ✅ MySQL performance optimizations already present');
+        } else {
+            // Replace the options array with optimized version using a more reliable pattern
+            $optionsPattern = "'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
                 
                 // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
                 
                 // Enable persistent connections for better performance
-                PDO::ATTR_PERSISTENT =>  true,
+                PDO::ATTR_PERSISTENT => (bool) env('TENANT_DB_PERSISTENT', true),
                 
                 // Use native prepared statements (faster)
                 PDO::ATTR_EMULATE_PREPARES => false,
@@ -191,43 +191,29 @@ class InstallTenancyCommand extends Command
                 
             ]) : [],";
 
-            if (str_contains($content, $simpleOptionsPattern)) {
-                $content = str_replace($simpleOptionsPattern, $optimizedOptions, $content);
-                $this->line('   ✅ Added performance optimizations to MySQL connection');
-            } else {
-                // Fallback: look for simpler pattern
-                $fallbackPattern = "PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],";
-                $fallbackReplacement = "PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-                
-                // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
-                
-                // Enable persistent connections for better performance
-                PDO::ATTR_PERSISTENT => true,
-                
-                // Use native prepared statements (faster)
-                PDO::ATTR_EMULATE_PREPARES => false,
-                
-                // Buffer queries for better performance with large result sets
-                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
-                
-                // Connection timeout settings
-                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECTION_TIMEOUT', 5),
-                
-                // Error handling
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                
-                // Default fetch mode
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                
-            ]) : [],";
+            // Look for various patterns to replace
+            $patterns = [
+                // Pattern 1: Standard Laravel options
+                "'options' => extension_loaded('pdo_mysql') ? array_filter([\n                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],",
+                // Pattern 2: Broken options from previous attempts
+                "'options' => extension_loaded('pdo_mysql') ? array_filter([\n                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n                \n               \n                \n            ]) : [],",
+                // Pattern 3: Just the closing part
+                "PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],"
+            ];
 
-                if (str_contains($content, $fallbackPattern)) {
-                    $content = str_replace($fallbackPattern, $fallbackReplacement, $content);
+            $patternFound = false;
+            foreach ($patterns as $pattern) {
+                if (str_contains($content, $pattern)) {
+                    $content = str_replace($pattern, $optionsPattern, $content);
                     $this->line('   ✅ Added performance optimizations to MySQL connection');
+                    $patternFound = true;
+                    break;
                 }
             }
-        } else {
-            $this->line('   ✅ MySQL performance optimizations already present');
+
+            if (!$patternFound) {
+                $this->line('   ℹ️  Standard MySQL options found, performance optimizations may need manual setup');
+            }
         }
         
         // Write the updated content back to the file
@@ -330,12 +316,12 @@ class InstallTenancyCommand extends Command
     protected function runMigrations(): void
     {
         try {
+            // Only run central database migrations during installation
             Artisan::call('migrate', ['--force' => true]);
             $this->line('   ✅ Central database migrations completed');
             
-            // Create initial tenant tables
-            Artisan::call('tenants:migrate', ['--force' => true]);
-            $this->line('   ✅ Tenant migration structure created');
+            // Skip tenant migrations during installation as no tenants exist yet
+            $this->line('   ✅ Tenant migration structure prepared (run when creating tenants)');
             
         } catch (\Exception $e) {
             $this->warn("   ⚠️  Migration error: {$e->getMessage()}");
