@@ -48,22 +48,54 @@ php artisan config:clear
 
 ## ⚙️ Environment Configuration
 
-Add these to your `.env` file:
+The installation command automatically adds these to your `.env` file:
 
 ```env
-# Performance Optimization
-TENANCY_CACHED_LOOKUP=true
-TENANCY_CACHE_TTL=3600
-TENANCY_CACHE_STORE=redis
-DB_PERSISTENT=true
-DB_CONNECTION_TIMEOUT=5
+# Database Configuration
+TENANT_DB_PREFIX=tenant_
+TENANT_DB_CONNECTION=mysql
+TENANT_DB_CHARSET=utf8mb4
+TENANT_DB_COLLATION=utf8mb4_unicode_ci
+TENANT_DB_PERSISTENT=true
+
+# Homepage Management
+TENANT_HOMEPAGE_ENABLED=true
+TENANT_HOMEPAGE_VIEW_PATH=tenants
+TENANT_HOMEPAGE_AUTO_CREATE_DIR=true
+TENANT_HOMEPAGE_FALLBACK_REDIRECT=/login
+
+# Cache Configuration (Database cache by default)
+TENANT_CACHE_DRIVER=database
+TENANT_CACHE_PREFIX=tenant_
+TENANT_CACHE_TTL=3600
+TENANT_CACHE_STATS_TTL=300
+
+# Migration & Seeding
+TENANT_AUTO_MIGRATE=false
+TENANT_AUTO_SEED=false
 
 # API Configuration
-ARTFLOW_TENANCY_API_KEY=your-secure-api-key-here
+TENANT_API_KEY=your-secure-api-key-here
+TENANT_API_NO_AUTH=false
+TENANT_API_ALLOW_LOCALHOST=true
+TENANT_API_RATE_LIMIT=true
+TENANT_API_RATE_LIMIT_ATTEMPTS=60
+TENANT_API_RATE_LIMIT_DECAY=1
 
-# Redis (Recommended)
-CACHE_DRIVER=redis
-SESSION_DRIVER=redis
+# Monitoring & Performance
+TENANT_MONITORING_ENABLED=true
+TENANT_MONITORING_RETENTION_DAYS=30
+TENANT_MONITORING_PERFORMANCE=true
+
+# Backup Configuration
+TENANT_BACKUP_ENABLED=false
+TENANT_BACKUP_DISK=local
+TENANT_BACKUP_RETENTION_DAYS=7
+
+# Stancl/Tenancy Cache Configuration
+TENANCY_CACHED_LOOKUP=true
+TENANCY_CACHE_TTL=3600
+TENANCY_CACHE_STORE=database
 ```
 
 ## 🧪 Verify Installation
@@ -81,20 +113,25 @@ php artisan tenancy:create-test-tenants --count=3
 
 ## 🌐 API Usage
 
-All endpoints require `X-API-Key` header:
+All endpoints require `api_key` query parameter:
 
 ```bash
 # Health check
-curl -H "X-API-Key: your-api-key" http://yourapp.com/api/tenancy/health
+curl "http://yourapp.com/api/health?api_key=your-api-key"
 
 # Create tenant
-curl -X POST -H "X-API-Key: your-api-key" \
+curl -X POST "http://yourapp.com/api/tenants?api_key=your-api-key" \
      -H "Content-Type: application/json" \
-     -d '{"name":"Acme Corp","domain":"acme.example.com"}' \
-     http://yourapp.com/api/tenancy/tenants
+     -d '{"name":"Acme Corp","domain":"acme.example.com"}'
 
 # List tenants  
-curl -H "X-API-Key: your-api-key" http://yourapp.com/api/tenancy/tenants
+curl "http://yourapp.com/api/tenants?api_key=your-api-key"
+
+# Enable homepage for tenant
+curl -X POST "http://yourapp.com/api/tenants/{tenant-id}/enable-homepage?api_key=your-api-key"
+
+# Disable homepage for tenant
+curl -X POST "http://yourapp.com/api/tenants/{tenant-id}/disable-homepage?api_key=your-api-key"
 ```
 
 ## 📊 Performance Features

@@ -81,9 +81,26 @@ return [
     */
 
     'cache' => [
-        'prefix' => 'tenant_',
-        'default_ttl' => 3600, // 1 hour
-        'stats_ttl' => 300,     // 5 minutes
+        'driver' => env('TENANT_CACHE_DRIVER', 'database'), // Default to database cache
+        'prefix' => env('TENANT_CACHE_PREFIX', 'tenant_'),
+        'default_ttl' => env('TENANT_CACHE_TTL', 3600), // 1 hour
+        'stats_ttl' => env('TENANT_CACHE_STATS_TTL', 300), // 5 minutes
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Homepage Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for tenant homepage management.
+    |
+    */
+
+    'homepage' => [
+        'enabled' => env('TENANT_HOMEPAGE_ENABLED', true),
+        'view_path' => env('TENANT_HOMEPAGE_VIEW_PATH', 'tenants'),
+        'auto_create_directory' => env('TENANT_HOMEPAGE_AUTO_CREATE_DIR', true),
+        'fallback_redirect' => env('TENANT_HOMEPAGE_FALLBACK_REDIRECT', '/login'),
     ],
 
     /*
@@ -159,21 +176,20 @@ return [
     */
 
     'api' => [
-        // API Key for X-API-Key header authentication
-        'api_key' => env('TENANCY_API_KEY'),
-        
-        
+        // API Key for authentication (query parameter: api_key)
+        'api_key' => env('TENANT_API_KEY', ''),
+
         // Disable all API authentication (for development/internal use)
-        'no_auth' => env('TENANCY_API_NO_AUTH', false),
+        'no_auth' => env('TENANT_API_NO_AUTH', false),
         
         // Allow localhost requests without authentication
-        'allow_localhost' => env('TENANCY_API_ALLOW_LOCALHOST', true),
+        'allow_localhost' => env('TENANT_API_ALLOW_LOCALHOST', true),
         
         // Rate limiting
         'rate_limit' => [
-            'enabled' => env('TENANCY_API_RATE_LIMIT', true),
-            'max_attempts' => env('TENANCY_API_RATE_LIMIT_ATTEMPTS', 60),
-            'decay_minutes' => env('TENANCY_API_RATE_LIMIT_DECAY', 1),
+            'enabled' => env('TENANT_API_RATE_LIMIT', true),
+            'max_attempts' => env('TENANT_API_RATE_LIMIT_ATTEMPTS', 60),
+            'decay_minutes' => env('TENANT_API_RATE_LIMIT_DECAY', 1),
         ],
     ],
 
@@ -187,9 +203,9 @@ return [
     */
 
     'monitoring' => [
-        'enabled' => env('TENANCY_MONITORING_ENABLED', true),
-        'metrics_retention_days' => env('TENANCY_METRICS_RETENTION_DAYS', 30),
-        'performance_tracking' => env('TENANCY_PERFORMANCE_TRACKING', true),
+        'enabled' => env('TENANT_MONITORING_ENABLED', true),
+        'metrics_retention_days' => env('TENANT_MONITORING_RETENTION_DAYS', 30),
+        'performance_tracking' => env('TENANT_MONITORING_PERFORMANCE', true),
     ],
 
     /*
@@ -202,8 +218,8 @@ return [
     */
 
     'backup' => [
-        'enabled' => env('TENANCY_BACKUP_ENABLED', false),
-        'storage_disk' => env('TENANCY_BACKUP_DISK', 'local'),
-        'retention_days' => env('TENANCY_BACKUP_RETENTION_DAYS', 7),
+        'enabled' => env('TENANT_BACKUP_ENABLED', false),
+        'storage_disk' => env('TENANT_BACKUP_DISK', 'local'),
+        'retention_days' => env('TENANT_BACKUP_RETENTION_DAYS', 7),
     ],
 ];

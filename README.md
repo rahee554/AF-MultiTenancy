@@ -37,13 +37,21 @@ Add to your `.env` file:
 # Database Configuration
 TENANT_DB_PREFIX=tenant_
 TENANT_DB_CONNECTION=mysql
-TENANT_DB_HOST=127.0.0.1
-TENANT_DB_PORT=3306
-TENANT_DB_USERNAME=root
-TENANT_DB_PASSWORD=
+TENANT_DB_PERSISTENT=true
+
+# Homepage Management
+TENANT_HOMEPAGE_ENABLED=true
+TENANT_HOMEPAGE_AUTO_CREATE_DIR=true
+
+# Cache Configuration (Default: database)
+TENANT_CACHE_DRIVER=database
+TENANT_CACHE_TTL=3600
 
 # API Security
 TENANT_API_KEY=your-secure-api-key-here
+
+# Monitoring & Performance
+TENANT_MONITORING_ENABLED=true
 ```
 
 ### Create Your First Tenant

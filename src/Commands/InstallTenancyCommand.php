@@ -150,14 +150,53 @@ class InstallTenancyCommand extends Command
         
         // Add tenancy-specific environment variables
         $tenancyVars = [
+            // Database Configuration
+            'TENANT_DB_PREFIX' => 'tenant_',
+            'TENANT_DB_CONNECTION' => 'mysql',
+            'TENANT_DB_CHARSET' => 'utf8mb4',
+            'TENANT_DB_COLLATION' => 'utf8mb4_unicode_ci',
+            'TENANT_DB_PERSISTENT' => 'true',
+            
+            // Migration & Seeding
+            'TENANT_AUTO_MIGRATE' => 'false',
+            'TENANT_AUTO_SEED' => 'false',
+            
+            // Cache Configuration (Default to database)
+            'TENANT_CACHE_DRIVER' => 'database',
+            'TENANT_CACHE_PREFIX' => 'tenant_',
+            'TENANT_CACHE_TTL' => '3600',
+            'TENANT_CACHE_STATS_TTL' => '300',
+            
+            // Homepage Management
+            'TENANT_HOMEPAGE_ENABLED' => 'true',
+            'TENANT_HOMEPAGE_VIEW_PATH' => 'tenants',
+            'TENANT_HOMEPAGE_AUTO_CREATE_DIR' => 'true',
+            'TENANT_HOMEPAGE_FALLBACK_REDIRECT' => '/login',
+            
+            // API Configuration
+            'TENANT_API_KEY' => 'your-secure-api-key-here',
+            'TENANT_API_NO_AUTH' => 'false',
+            'TENANT_API_ALLOW_LOCALHOST' => 'true',
+            'TENANT_API_RATE_LIMIT' => 'true',
+            'TENANT_API_RATE_LIMIT_ATTEMPTS' => '60',
+            'TENANT_API_RATE_LIMIT_DECAY' => '1',
+            
+            // Monitoring & Performance
+            'TENANT_MONITORING_ENABLED' => 'true',
+            'TENANT_MONITORING_RETENTION_DAYS' => '30',
+            'TENANT_MONITORING_PERFORMANCE' => 'true',
+            
+            // Backup Configuration
+            'TENANT_BACKUP_ENABLED' => 'false',
+            'TENANT_BACKUP_DISK' => 'local',
+            'TENANT_BACKUP_RETENTION_DAYS' => '7',
+            
+            // Stancl/Tenancy Cache Configuration
             'TENANCY_CACHED_LOOKUP' => 'true',
             'TENANCY_CACHE_TTL' => '3600',
-            'TENANCY_CACHE_STORE' => 'redis',
-            'DB_PERSISTENT' => 'true',
-            'DB_CONNECTION_TIMEOUT' => '5',
-            'ARTFLOW_TENANCY_API_KEY' => 'your-secure-api-key-here',
+            'TENANCY_CACHE_STORE' => 'database',
         ];
-        
+                
         foreach ($tenancyVars as $key => $value) {
             if (!str_contains($envContent, $key)) {
                 $updates[] = "{$key}={$value}";
@@ -165,9 +204,15 @@ class InstallTenancyCommand extends Command
         }
         
         if (!empty($updates)) {
-            $envContent .= "\n\n# Artflow Studio Tenancy Settings\n" . implode("\n", $updates) . "\n";
+            $envContent .= "\n\n# AF-MultiTenancy Package Configuration\n" . implode("\n", $updates) . "\n";
             File::put($envPath, $envContent);
             $this->line('   ✅ Environment variables added');
+            
+            // Show what was added
+            $this->info('   📋 Added environment variables:');
+            foreach ($updates as $update) {
+                $this->line("      • {$update}");
+            }
         } else {
             $this->line('   ✅ Environment variables already configured');
         }

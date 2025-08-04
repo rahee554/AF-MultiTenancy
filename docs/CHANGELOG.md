@@ -5,6 +5,55 @@ All notable changes to the AF-MultiTenancy package will be documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.6] - 2025-08-04
+
+### 🧹 Environment Variables Cleanup
+- **Consolidated Environment Variables**: Standardized all environment variables to use `TENANT_` prefix
+- **Removed Duplicate Config Files**: Removed `config/tenancy.php`, consolidated into `config/artflow-tenancy.php`
+- **Removed Duplicate Commands**: Removed `InstallPackageCommand.php`, keeping only `af-tenancy:install`
+- **API Key Consolidation**: Changed from `ARTFLOW_TENANCY_API_KEY` to `TENANT_API_KEY`
+- **Monitoring Variables**: Changed `TENANCY_MONITORING_*` to `TENANT_MONITORING_*`
+- **Backup Variables**: Changed `TENANCY_BACKUP_*` to `TENANT_BACKUP_*`
+
+### 🏠 Homepage Management Enhancements
+- **Global Homepage Toggle**: Added `TENANT_HOMEPAGE_ENABLED` environment variable
+- **Auto-Directory Creation**: Added `TENANT_HOMEPAGE_AUTO_CREATE_DIR` for automatic view directory creation
+- **Configurable View Path**: Added `TENANT_HOMEPAGE_VIEW_PATH` (default: `tenants`)
+- **Custom Fallback Redirect**: Added `TENANT_HOMEPAGE_FALLBACK_REDIRECT` (default: `/login`)
+- **Automatic View Generation**: Homepage views auto-created at `resources/views/tenants/{domain}/home.blade.php`
+- **CLI & API Integration**: Full CLI and API support for homepage enable/disable
+
+### 🗂️ File Structure Improvements
+- **Removed Default Homepage View**: No longer publish `resources/views/tenants/home.blade.php`
+- **Auto-Generated Views**: Homepage views created per-domain when enabled
+- **Service Layer Integration**: Added `TenantService::createHomepageView()` and `removeHomepageView()`
+
+### ⚡ Cache Configuration
+- **Database Cache Default**: Changed default cache driver from Redis to database
+- **Cache Variable Consolidation**: Standardized cache-related environment variables
+- **Stancl/Tenancy Integration**: Updated cache store configuration for better compatibility
+
+### 📋 Updated Environment Variables
+```env
+# New consolidated variables (auto-added by installation)
+TENANT_HOMEPAGE_ENABLED=true
+TENANT_HOMEPAGE_AUTO_CREATE_DIR=true
+TENANT_CACHE_DRIVER=database
+TENANT_API_KEY=your-secure-api-key-here
+TENANT_MONITORING_ENABLED=true
+TENANT_BACKUP_ENABLED=false
+```
+
+### 🔧 Installation Command Improvements
+- **Enhanced Environment Setup**: Installation now adds all 30+ environment variables automatically
+- **Better Organization**: Variables grouped by functionality with comments
+- **Verbose Output**: Shows which variables were added during installation
+
+### 📚 Documentation Updates
+- **Updated Installation Guide**: Reflects new environment variable structure
+- **API Documentation**: Updated to show new API key parameter format
+- **README**: Updated environment setup section with consolidated variables
+
 ## [0.6.5] - 2025-08-04
 
 ### 🎉 Added

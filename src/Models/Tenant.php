@@ -92,6 +92,14 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function enableHomepage(): void
     {
         $this->update(['has_homepage' => true]);
+        
+        // Auto-create homepage view directory and file if enabled
+        if (config('artflow-tenancy.homepage.auto_create_directory', true)) {
+            $domain = $this->domains()->first()?->domain;
+            if ($domain) {
+                app(\ArtflowStudio\Tenancy\Services\TenantService::class)->createHomepageView($domain);
+            }
+        }
     }
 
     /**
@@ -100,6 +108,10 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     public function disableHomepage(): void
     {
         $this->update(['has_homepage' => false]);
+        
+        // Optionally remove homepage view directory when disabling
+        // Note: We don't auto-remove to preserve custom content
+        // User can manually delete if needed
     }
 
     /**

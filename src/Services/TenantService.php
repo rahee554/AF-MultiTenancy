@@ -511,4 +511,114 @@ class TenantService
             Log::info("Database does not exist, no need to drop: {$databaseName}");
         }
     }
+
+    /**
+     * Create homepage directory and view file for a tenant
+     */
+    public function createHomepageView(string $domain): bool
+    {
+        try {
+            // Check if homepage auto-creation is enabled
+            if (!config('artflow-tenancy.homepage.auto_create_directory', true)) {
+                return false;
+            }
+
+            $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
+            $resourcePath = resource_path("views/{$viewPath}/{$domain}");
+            
+            // Create directory if it doesn't exist
+            if (!is_dir($resourcePath)) {
+                mkdir($resourcePath, 0755, true);
+                Log::info("Created homepage directory for tenant: {$domain}");
+            }
+            
+            // Create home.blade.php if it doesn't exist
+            $homeFilePath = "{$resourcePath}/home.blade.php";
+            if (!file_exists($homeFilePath)) {
+                $homeContent = $this->getDefaultHomepageContent($domain);
+                file_put_contents($homeFilePath, $homeContent);
+                Log::info("Created homepage view for tenant: {$domain}");
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            Log::error("Failed to create homepage view for tenant {$domain}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Remove homepage directory and view file for a tenant
+     */
+    public function removeHomepageView(string $domain): bool
+    {
+        try {
+            $viewPath = config('artflow-tenancy.homepage.view_path', 'tenants');
+            $resourcePath = resource_path("views/{$viewPath}/{$domain}");
+            
+            if (is_dir($resourcePath)) {
+                // Remove all files in the directory
+                $files = glob("{$resourcePath}/*");
+                foreach ($files as $file) {
+                    if (is_file($file)) {
+                        unlink($file);
+                    }
+                }
+                
+                // Remove the directory
+                rmdir($resourcePath);
+                Log::info("Removed homepage directory for tenant: {$domain}");
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            Log::error("Failed to remove homepage view for tenant {$domain}: " . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Get default homepage content template
+     */
+    private function getDefaultHomepageContent(string $domain): string
+    {
+        return <<<BLADE
+@extends('layouts.app')
+
+@section('title', 'Welcome to {$domain}')
+
+@section('content')
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4>Welcome to {{ \$tenant->data['name'] ?? '{$domain}' }}</h4>
+                </div>
+                
+                <div class="card-body">
+                    <h5>Tenant Homepage</h5>
+                    <p>This is the custom homepage for <strong>{{ \$domain }}</strong></p>
+                    
+                    <div class="alert alert-info">
+                        <h6>Tenant Information:</h6>
+                        <ul class="mb-0">
+                            <li><strong>Domain:</strong> {{ \$domain }}</li>
+                            <li><strong>Tenant ID:</strong> {{ \$tenant->id }}</li>
+                            <li><strong>Status:</strong> {{ \$tenant->data['status'] ?? 'active' }}</li>
+                        </ul>
+                    </div>
+                    
+                    <p class="text-muted">
+                        <small>You can customize this page by editing the view file at:<br>
+                        <code>resources/views/tenants/{$domain}/home.blade.php</code></small>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@endsection
+BLADE;
+    }
 }

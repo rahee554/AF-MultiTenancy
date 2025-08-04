@@ -41,7 +41,7 @@ return [
         'cached_lookup' => [
             'enabled' => env('TENANCY_CACHED_LOOKUP', true),
             'ttl' => env('TENANCY_CACHE_TTL', 3600), // 1 hour
-            'store' => env('TENANCY_CACHE_STORE', 'redis'), // Use Redis for best performance
+            'store' => env('TENANCY_CACHE_STORE', 'database'), // Default to database cache
         ],
         
         'connection_override' => [
