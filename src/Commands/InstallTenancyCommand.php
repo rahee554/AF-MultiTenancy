@@ -165,14 +165,14 @@ class InstallTenancyCommand extends Command
         if (!str_contains($content, 'PDO::ATTR_PERSISTENT')) {
             // Replace the simple options array with optimized version
             $simpleOptionsPattern = "'options' => extension_loaded('pdo_mysql') ? array_filter([\n                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n            ]) : [],";
-            
+
             $optimizedOptions = "'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
                 
                 // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
                 
                 // Enable persistent connections for better performance
-                PDO::ATTR_PERSISTENT => env('TENANT_DB_PERSISTENT', true),
+                PDO::ATTR_PERSISTENT =>  true,
                 
                 // Use native prepared statements (faster)
                 PDO::ATTR_EMULATE_PREPARES => false,
@@ -181,7 +181,7 @@ class InstallTenancyCommand extends Command
                 PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
                 
                 // Connection timeout settings
-                PDO::ATTR_TIMEOUT => env('DB_CONNECTION_TIMEOUT', 5),
+                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECTION_TIMEOUT', 5),
                 
                 // Error handling
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -190,7 +190,7 @@ class InstallTenancyCommand extends Command
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 
             ]) : [],";
-            
+
             if (str_contains($content, $simpleOptionsPattern)) {
                 $content = str_replace($simpleOptionsPattern, $optimizedOptions, $content);
                 $this->line('   ✅ Added performance optimizations to MySQL connection');
@@ -202,7 +202,7 @@ class InstallTenancyCommand extends Command
                 // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
                 
                 // Enable persistent connections for better performance
-                PDO::ATTR_PERSISTENT => env('TENANT_DB_PERSISTENT', true),
+                PDO::ATTR_PERSISTENT => true,
                 
                 // Use native prepared statements (faster)
                 PDO::ATTR_EMULATE_PREPARES => false,
@@ -211,7 +211,7 @@ class InstallTenancyCommand extends Command
                 PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
                 
                 // Connection timeout settings
-                PDO::ATTR_TIMEOUT => env('DB_CONNECTION_TIMEOUT', 5),
+                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECTION_TIMEOUT', 5),
                 
                 // Error handling
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
@@ -220,7 +220,7 @@ class InstallTenancyCommand extends Command
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 
             ]) : [],";
-                
+
                 if (str_contains($content, $fallbackPattern)) {
                     $content = str_replace($fallbackPattern, $fallbackReplacement, $content);
                     $this->line('   ✅ Added performance optimizations to MySQL connection');
@@ -257,47 +257,48 @@ class InstallTenancyCommand extends Command
             'TENANT_DB_CONNECTION' => 'mysql',
             'TENANT_DB_CHARSET' => 'utf8mb4',
             'TENANT_DB_COLLATION' => 'utf8mb4_unicode_ci',
-            'TENANT_DB_PERSISTENT' => 'true',
-            
+            // Use 1/0 for boolean env vars to ensure correct type in PHP
+            'TENANT_DB_PERSISTENT' => '1',
+
             // Database Connection Timeout
             'DB_CONNECTION_TIMEOUT' => '5',
-            
+
             // Migration & Seeding
-            'TENANT_AUTO_MIGRATE' => 'false',
-            'TENANT_AUTO_SEED' => 'false',
-            
+            'TENANT_AUTO_MIGRATE' => '0',
+            'TENANT_AUTO_SEED' => '0',
+
             // Cache Configuration (Default to database)
             'TENANT_CACHE_DRIVER' => 'database',
             'TENANT_CACHE_PREFIX' => 'tenant_',
             'TENANT_CACHE_TTL' => '3600',
             'TENANT_CACHE_STATS_TTL' => '300',
-            
+
             // Homepage Management
-            'TENANT_HOMEPAGE_ENABLED' => 'true',
+            'TENANT_HOMEPAGE_ENABLED' => '1',
             'TENANT_HOMEPAGE_VIEW_PATH' => 'tenants',
-            'TENANT_HOMEPAGE_AUTO_CREATE_DIR' => 'true',
+            'TENANT_HOMEPAGE_AUTO_CREATE_DIR' => '1',
             'TENANT_HOMEPAGE_FALLBACK_REDIRECT' => '/login',
-            
+
             // API Configuration
             'TENANT_API_KEY' => 'your-secure-api-key-here',
-            'TENANT_API_NO_AUTH' => 'false',
-            'TENANT_API_ALLOW_LOCALHOST' => 'true',
-            'TENANT_API_RATE_LIMIT' => 'true',
+            'TENANT_API_NO_AUTH' => '0',
+            'TENANT_API_ALLOW_LOCALHOST' => '1',
+            'TENANT_API_RATE_LIMIT' => '1',
             'TENANT_API_RATE_LIMIT_ATTEMPTS' => '60',
             'TENANT_API_RATE_LIMIT_DECAY' => '1',
-            
+
             // Monitoring & Performance
-            'TENANT_MONITORING_ENABLED' => 'true',
+            'TENANT_MONITORING_ENABLED' => '1',
             'TENANT_MONITORING_RETENTION_DAYS' => '30',
-            'TENANT_MONITORING_PERFORMANCE' => 'true',
-            
+            'TENANT_MONITORING_PERFORMANCE' => '1',
+
             // Backup Configuration
-            'TENANT_BACKUP_ENABLED' => 'false',
+            'TENANT_BACKUP_ENABLED' => '0',
             'TENANT_BACKUP_DISK' => 'local',
             'TENANT_BACKUP_RETENTION_DAYS' => '7',
-            
+
             // Stancl/Tenancy Cache Configuration
-            'TENANCY_CACHED_LOOKUP' => 'true',
+            'TENANCY_CACHED_LOOKUP' => '1',
             'TENANCY_CACHE_TTL' => '3600',
             'TENANCY_CACHE_STORE' => 'database',
         ];
