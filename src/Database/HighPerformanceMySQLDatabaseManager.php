@@ -34,20 +34,23 @@ class HighPerformanceMySQLDatabaseManager extends MySQLDatabaseManager
         }
 
         try {
-            // Use raw SQL for better performance
-            $connection = $this->database();
-            $connection->unprepared("CREATE DATABASE IF NOT EXISTS `{$database}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            // Use parent method for compatibility but with optimizations
+            $result = parent::createDatabase($tenant);
             
-            // Optimize the database for performance
-            $connection->unprepared("USE `{$database}`");
-            $connection->unprepared("SET SESSION sql_mode='TRADITIONAL'");
-            $connection->unprepared("SET SESSION innodb_flush_log_at_trx_commit=2");
-            $connection->unprepared("SET SESSION innodb_buffer_pool_size=268435456"); // 256MB
+            if ($result) {
+                // Apply post-creation optimizations
+                $connection = $this->database();
+                
+                // Set database-specific optimizations
+                $connection->unprepared("USE `{$database}`");
+                $connection->unprepared("SET SESSION sql_mode='TRADITIONAL'");
+                $connection->unprepared("SET SESSION innodb_flush_log_at_trx_commit=2");
+                
+                // Cache the result
+                static::$databaseExistenceCache[$database] = true;
+            }
             
-            // Cache the result
-            static::$databaseExistenceCache[$database] = true;
-            
-            return true;
+            return $result;
         } catch (\Exception $e) {
             static::$databaseExistenceCache[$database] = false;
             throw $e;
@@ -85,19 +88,35 @@ class HighPerformanceMySQLDatabaseManager extends MySQLDatabaseManager
     {
         $config = parent::makeConnectionConfig($baseConfig, $databaseName);
         
-        // Add performance optimizations
-        $config['options'] = array_merge($config['options'] ?? [], [
+        // Only add options if they don't already exist to prevent conflicts
+        $defaultOptions = $config['options'] ?? [];
+        
+        // Carefully merge performance optimizations without conflicts
+        $performanceOptions = [
             \PDO::ATTR_PERSISTENT => true,
             \PDO::ATTR_EMULATE_PREPARES => false,
             \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
             \PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='TRADITIONAL', innodb_flush_log_at_trx_commit=2",
-        ]);
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            \PDO::ATTR_TIMEOUT => 5,
+        ];
         
-        // Add connection pooling simulation
+        // Only add options that don't already exist
+        foreach ($performanceOptions as $option => $value) {
+            if (!array_key_exists($option, $defaultOptions)) {
+                $defaultOptions[$option] = $value;
+            }
+        }
+        
+        $config['options'] = $defaultOptions;
+        
+        // Add connection pooling metadata (for monitoring/documentation)
         $config['pool'] = [
             'min_connections' => 1,
             'max_connections' => 10,
             'idle_timeout' => 30,
+            'max_lifetime' => 3600,
         ];
         
         return $config;

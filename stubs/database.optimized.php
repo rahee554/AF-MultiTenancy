@@ -53,33 +53,14 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-                
-                // ===== MULTI-TENANT PERFORMANCE OPTIMIZATIONS =====
-                
-                // Enable persistent connections for better performance
-                PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
-                
-                // Use native prepared statements (faster)
+                PDO::ATTR_PERSISTENT => (bool) env('DB_PERSISTENT', true),
                 PDO::ATTR_EMULATE_PREPARES => false,
-                
-                // Buffer queries for better performance with large result sets
                 PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
-                
-                // Optimize SQL mode and settings
-                PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='TRADITIONAL', innodb_flush_log_at_trx_commit=2",
-                
-                // Security: disable local file loading
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET sql_mode='TRADITIONAL'",
                 PDO::MYSQL_ATTR_LOCAL_INFILE => false,
-                
-                // Connection timeout settings
-                PDO::ATTR_TIMEOUT => env('DB_CONNECTION_TIMEOUT', 5),
-                
-                // Error handling
+                PDO::ATTR_TIMEOUT => (int) env('DB_CONNECTION_TIMEOUT', 5),
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                
-                // Default fetch mode
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                
             ]) : [],
             
             // Connection pooling simulation (for documentation)
