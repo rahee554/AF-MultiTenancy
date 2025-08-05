@@ -11,93 +11,78 @@ class HomepageRedirectMiddleware
 {
     /**
      * Handle an incoming request for tenant homepage.
-     * If tenant has homepage view, show it. Otherwise redirect to fallback.
+     * Only processes the root '/' route - all other routes pass through
      */
     public function handle($request, Closure $next)
     {
-
-          $centralDomains = config('tenancy.central_domains', []);
-    $domain = $request->getHost();
-
-    // If this is a central domain, skip and go to next middleware
-    if (in_array($domain, (array)$centralDomains)) {
-        return $next($request);
-    }
-
-    // Try to get the tenant from the current tenancy context
-    $tenant = null;
-    try {
-        if (function_exists('tenant')) {
-            $tenant = tenant();
+        // Only process the root route '/' - all other routes should pass through
+        if ($request->path() !== '/') {
+            return $next($request);
         }
-        if (!$tenant) {
-            $tenant = app()->bound('tenant') ? app('tenant') : null;
-        }
-    } catch (\Exception $e) {
-        Log::info('HomepageRedirectMiddleware: Error getting tenant', [
-            'domain' => $domain,
-            'error' => $e->getMessage()
-        ]);
-    }
 
-    if (!$tenant) {
-        try {
-            $tenant = Tenant::whereHas('domains', function($query) use ($domain) {
-                $query->where('domain', $domain);
-            })->first();
-        } catch (\Exception $e) {
-            Log::info('HomepageRedirectMiddleware: Error finding tenant by domain', [
-                'domain' => $domain,
-                'error' => $e->getMessage()
-            ]);
-        }
-    }
-
-    $config = config('artflow-tenancy.homepage');
-    $fallbackRedirect = $config['fallback_redirect'] ?? '/login';
-
-    // If tenant exists but hasHomepage is false, redirect to fallback
-    if ($tenant && method_exists($tenant, 'hasHomepage') && !$tenant->hasHomepage()) {
-        Log::info('HomepageRedirectMiddleware: Tenant hasHomepage disabled, redirecting', [
-            'domain' => $domain,
-            'tenant_id' => $tenant->id,
-            'fallback' => $fallbackRedirect
-        ]);
-        return redirect($fallbackRedirect);
-    }
-    // If this is a central domain, skip and go to next middleware
-    if (in_array($domain, (array)$centralDomains)) {
-        return $next($request);
-    }
-
-        $config = config('artflow-tenancy.homepage');
-        $fallbackRedirect = $config['fallback_redirect'] ?? '/login';
-        $viewPath = $config['view_path'] ?? 'tenants';
-
-        // Get the domain first
+        $centralDomains = config('tenancy.central_domains', []);
         $domain = $request->getHost();
-        
+
+        // If this is a central domain, skip and go to next middleware
+        if (in_array($domain, (array)$centralDomains)) {
+            return $next($request);
+        }
+
         // Try to get the tenant from the current tenancy context
         $tenant = null;
         try {
-            // Check if tenant is already initialized by stancl/tenancy
             if (function_exists('tenant')) {
                 $tenant = tenant();
             }
-            
-            // If tenant() function doesn't exist or returns null, try app binding
             if (!$tenant) {
                 $tenant = app()->bound('tenant') ? app('tenant') : null;
             }
         } catch (\Exception $e) {
-            // Log the error for debugging
             Log::info('HomepageRedirectMiddleware: Error getting tenant', [
                 'domain' => $domain,
                 'error' => $e->getMessage()
             ]);
         }
 
-        // If we still don't have a tenant, try to find it by domain
+        if (!$tenant) {
+            try {
+                $tenant = Tenant::whereHas('domains', function($query) use ($domain) {
+                    $query->where('domain', $domain);
+                })->first();
+            } catch (\Exception $e) {
+                Log::info('HomepageRedirectMiddleware: Error finding tenant by domain', [
+                    'domain' => $domain,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+
+        $config = config('artflow-tenancy.homepage');
+        $fallbackRedirect = $config['fallback_redirect'] ?? '/login';
+
+        // If tenant exists but hasHomepage is false, redirect to fallback
+        if ($tenant && method_exists($tenant, 'hasHomepage') && !$tenant->hasHomepage()) {
+            Log::info('HomepageRedirectMiddleware: Tenant hasHomepage disabled, redirecting', [
+                'domain' => $domain,
+                'tenant_id' => $tenant->id,
+                'fallback' => $fallbackRedirect
+            ]);
+            return redirect($fallbackRedirect);
+        }
+
+        // Continue with the homepage display logic for root route only
+        return $this->handleHomepageDisplay($request, $next, $tenant, $domain);
+    }
+
+    /**
+     * Handle the homepage display logic
+     * CRITICAL FIX: This method was missing, causing the undefined method error
+     */
+    protected function handleHomepageDisplay($request, Closure $next, $tenant, $domain)
+    {
+        $config = config('artflow-tenancy.homepage');
+        $viewPath = $config['view_path'] ?? 'tenants';
+        $fallbackRedirect = $config['fallback_redirect'] ?? '/login';
         if (!$tenant) {
             try {
                 $tenant = Tenant::whereHas('domains', function($query) use ($domain) {

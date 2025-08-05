@@ -87,14 +87,14 @@ class TestPerformanceCommand extends Command
 
 
         // Run isolation tests if requested
-
         if ($this->option('test-isolation')) {
+            $this->info('🔒 Running tenant isolation tests...');
             $this->runIsolationTests($tenants, $metrics);
         }
 
         // Run persistence tests if requested
-
         if ($this->option('test-persistence')) {
+            $this->info('💾 Running persistence tests...');
             $this->runPersistenceTests($tenants, $metrics);
         }
 

@@ -15,8 +15,24 @@ use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolver;
+use ArtflowStudio\Tenancy\Http\Middleware\SmartTenancyInitializer;
+use ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware;
 use ArtflowStudio\Tenancy\Commands\WarmUpCacheCommand;
 use ArtflowStudio\Tenancy\Commands\DiagnoseDatabaseCommand;
+use ArtflowStudio\Tenancy\Commands\FixTenantDatabasesCommand;
+use ArtflowStudio\Tenancy\Commands\ValidateTenancySystemCommand;
+use ArtflowStudio\Tenancy\Commands\EnhancedTestPerformanceCommand;
+use ArtflowStudio\Tenancy\Commands\TenantIsolationTestCommand;
+use ArtflowStudio\Tenancy\Commands\TenantConnectionTestCommand;
+use ArtflowStudio\Tenancy\Commands\TenantStressTestCommand;
+use ArtflowStudio\Tenancy\Commands\TestMiddlewareCommand;
+use ArtflowStudio\Tenancy\Commands\CheckRouteConfigCommand;
+use ArtflowStudio\Tenancy\Console\Commands\TestTenantAuthentication;
+use ArtflowStudio\Tenancy\Console\Commands\DebugAuthenticationFlow;
+use ArtflowStudio\Tenancy\Console\Commands\TestAuthContext;
+use ArtflowStudio\Tenancy\Console\Commands\AddTenantAwareToModels;
+use ArtflowStudio\Tenancy\Console\Commands\ComprehensiveDatabaseTest;
 use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
 use ArtflowStudio\Tenancy\Database\DynamicDatabaseConfigManager;
 
@@ -50,9 +66,26 @@ class TenancyServiceProvider extends ServiceProvider
         // Merge our configuration with defaults
         $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
         
+        // CRITICAL: Register middleware aliases EARLY in register() method to avoid "Target class [universal] does not exist" errors
+        $this->registerMiddlewareEarly();
+        
         // DISABLE automatic dynamic database configuration to prevent conflicts
         // Use the DiagnoseDatabaseCommand --fix flag to apply when needed
         // DynamicDatabaseConfigManager::initialize();
+    }
+
+    /**
+     * Register middleware aliases early to prevent "Target class [universal] does not exist" errors
+     */
+    protected function registerMiddlewareEarly(): void
+    {
+        // CRITICAL: Register universal middleware alias IMMEDIATELY in register() method
+        // This prevents "Target class [universal] does not exist" errors with Livewire
+        $router = $this->app['router'];
+        $router->aliasMiddleware('universal', \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class);
+        
+        // Also register tenant middleware early
+        $router->aliasMiddleware('tenant', \ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware::class);
     }
 
     /**
@@ -98,6 +131,19 @@ class TenancyServiceProvider extends ServiceProvider
                 InstallTenancyCommand::class,
                 WarmUpCacheCommand::class,
                 DiagnoseDatabaseCommand::class,
+                FixTenantDatabasesCommand::class,
+                ValidateTenancySystemCommand::class,
+                EnhancedTestPerformanceCommand::class,
+                TenantIsolationTestCommand::class,
+                TenantConnectionTestCommand::class,
+                TenantStressTestCommand::class,
+                TestMiddlewareCommand::class,
+                CheckRouteConfigCommand::class,
+                TestTenantAuthentication::class,
+                DebugAuthenticationFlow::class,
+                TestAuthContext::class,
+                AddTenantAwareToModels::class,
+                ComprehensiveDatabaseTest::class,
             ]);
         }
 
@@ -106,6 +152,9 @@ class TenancyServiceProvider extends ServiceProvider
         
         // Register middleware
         $this->registerMiddleware();
+        
+        // Configure Livewire for tenancy
+        $this->configureLivewireForTenancy();
         
         // Configure cached lookup for performance
         $this->configureCachedLookup();
@@ -121,18 +170,28 @@ class TenancyServiceProvider extends ServiceProvider
     {
         $router = $this->app['router'];
         
-        // Register middleware aliases
-        $router->aliasMiddleware('tenant', TenantMiddleware::class);
+        // Register simplified tenant middleware
+        $router->aliasMiddleware('tenant', SimpleTenantMiddleware::class);
+        
+        // Register CRITICAL universal middleware for stancl/tenancy UniversalRoutes feature
+        $router->aliasMiddleware('universal', \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class);
+        
+        // Register authentication-specific tenant middleware (lightweight)
+        $router->aliasMiddleware('tenant.auth', TenantAuthMiddleware::class);
+        
+        // Register other middleware aliases
         $router->aliasMiddleware('tenancy.api', ApiAuthMiddleware::class);
         $router->aliasMiddleware('central.tenant', CentralDomainMiddleware::class);
         $router->aliasMiddleware('smart.domain', SmartDomainResolver::class);
         $router->aliasMiddleware('tenant.homepage', HomepageRedirectMiddleware::class);
         
-        // Register middleware group for tenant routes
+        // Legacy compatibility (deprecated - use 'tenant' instead)
+        $router->aliasMiddleware('tenant.legacy', TenantMiddleware::class);
+        $router->aliasMiddleware('smart.tenant', SimpleTenantMiddleware::class);
+        
+        // Register middleware group for tenant routes (without homepage middleware)
         $router->middlewareGroup('tenant', [
-            \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
-            TenantMiddleware::class,
-            HomepageRedirectMiddleware::class,
+            SimpleTenantMiddleware::class,
         ]);
         
         // Register central domain middleware group
@@ -183,6 +242,56 @@ class TenancyServiceProvider extends ServiceProvider
             \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$shouldCache = true;
             \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$cacheTTL = $config['ttl'];
             \Stancl\Tenancy\Resolvers\RequestDataTenantResolver::$cacheStore = $config['store'];
+        }
+    }
+
+    /**
+     * Configure Livewire for tenancy
+     */
+    protected function configureLivewireForTenancy(): void
+    {
+        // Only configure if Livewire is installed
+        if (!class_exists(\Livewire\Livewire::class)) {
+            return;
+        }
+
+        // Configure Livewire update route with tenant middleware for AJAX requests
+        \Livewire\Livewire::setUpdateRoute(function ($handle) {
+            return Route::post('/livewire/update', $handle)
+                ->middleware([
+                    'web',
+                    'universal', // This is our registered alias for InitializeTenancyByDomain
+                    \Stancl\Tenancy\Middleware\ScopeSessions::class, // Prevent session forgery
+                ]);
+        });
+        
+        // Configure file uploads for tenant support if needed
+        if (class_exists(\Livewire\Features\SupportFileUploads\FilePreviewController::class)) {
+            \Livewire\Features\SupportFileUploads\FilePreviewController::$middleware = [
+                'web', 
+                'universal', 
+                \Stancl\Tenancy\Middleware\ScopeSessions::class,
+            ];
+        }
+        
+        // Update file upload middleware in Livewire config
+        $this->updateLivewireFileUploadMiddleware();
+    }
+
+    /**
+     * Update Livewire file upload middleware configuration
+     */
+    protected function updateLivewireFileUploadMiddleware(): void
+    {
+        // Only update if config exists
+        if (config()->has('livewire.temporary_file_upload.middleware')) {
+            config([
+                'livewire.temporary_file_upload.middleware' => [
+                    'throttle:60,1',
+                    'universal',
+                    \Stancl\Tenancy\Middleware\ScopeSessions::class,
+                ],
+            ]);
         }
     }
 

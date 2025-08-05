@@ -82,19 +82,47 @@ class HighPerformanceMySQLDatabaseManager extends MySQLDatabaseManager
      */
     public function makeConnectionConfig(array $baseConfig, string $databaseName): array
     {
+        // CRITICAL: Use parent method first to ensure proper stancl/tenancy integration
         $config = parent::makeConnectionConfig($baseConfig, $databaseName);
         
         // ENSURE tenant connection is properly configured
-        // The parent method should handle all the PDO options correctly
-        // We just need to ensure the database name is set correctly
+        // Double-check the database name is set correctly
         $config['database'] = $databaseName;
         
-        // Add pool metadata for monitoring/documentation
-        $config['pool'] = [
+        // Ensure we have all required connection parameters
+        $config['host'] = $config['host'] ?? $baseConfig['host'] ?? '127.0.0.1';
+        $config['port'] = $config['port'] ?? $baseConfig['port'] ?? '3306';
+        $config['username'] = $config['username'] ?? $baseConfig['username'] ?? 'root';
+        $config['password'] = $config['password'] ?? $baseConfig['password'] ?? '';
+        $config['charset'] = $config['charset'] ?? $baseConfig['charset'] ?? 'utf8mb4';
+        $config['collation'] = $config['collation'] ?? $baseConfig['collation'] ?? 'utf8mb4_unicode_ci';
+        
+        // Add performance optimizations (if not already present from parent)
+        if (!isset($config['options'])) {
+            $config['options'] = [];
+        }
+        
+        // Merge with existing options, don't override parent's critical PDO settings
+        $performanceOptions = [
+            // Only add options that aren't already set by parent
+            \PDO::ATTR_TIMEOUT => (int) env('DB_CONNECTION_TIMEOUT', 5),
+            \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+        ];
+        
+        // Only add options that aren't already configured
+        foreach ($performanceOptions as $key => $value) {
+            if (!isset($config['options'][$key])) {
+                $config['options'][$key] = $value;
+            }
+        }
+        
+        // Add pool metadata for monitoring (non-functional, just for documentation)
+        $config['_pool_metadata'] = [
             'min_connections' => 1,
             'max_connections' => 10,
             'idle_timeout' => 30,
             'max_lifetime' => 3600,
+            'manager' => 'HighPerformanceMySQLDatabaseManager',
         ];
         
         return $config;

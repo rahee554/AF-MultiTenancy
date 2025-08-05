@@ -465,35 +465,67 @@ class TenantService
     private function checkTenantDatabase(string $databaseName): bool
     {
         try {
+            // First try using stancl/tenancy's database manager
             $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
             
-            // Create a mock tenant object for database checking
-            $mockTenant = new Tenant(['id' => 'temp']);
-            $mockTenant->database_name = $databaseName;
+            if (method_exists($databaseManager, 'databaseExists')) {
+                return $databaseManager->databaseExists($databaseName);
+            }
             
-            return $databaseManager->databaseExists($mockTenant);
+            // Fallback to direct SQL query
+            $result = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
+            return !empty($result);
+            
         } catch (\Exception $e) {
+            Log::warning("Database existence check failed: " . $e->getMessage());
             return false;
         }
     }
     
     /**
-     * Create a physical database
+     * Create a physical database using stancl/tenancy's database manager
      */
     private function createPhysicalDatabase(string $databaseName): void
     {
-        $connection = config('database.default');
-        $charset = config("database.connections.{$connection}.charset", 'utf8mb4');
-        $collation = config("database.connections.{$connection}.collation", 'utf8mb4_unicode_ci');
-        
-        // Check if database already exists
-        $exists = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
-        
-        if (empty($exists)) {
-            DB::statement("CREATE DATABASE `{$databaseName}` CHARACTER SET {$charset} COLLATE {$collation}");
-            Log::info("Physical database created: {$databaseName}");
-        } else {
-            Log::info("Database already exists: {$databaseName}");
+        try {
+            // Use stancl/tenancy's database manager for proper database creation
+            $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
+            
+            // Create a temporary tenant object for database creation
+            $tempTenant = new Tenant(['id' => (string) \Illuminate\Support\Str::uuid()]);
+            $tempTenant->setInternal('db_name', $databaseName);
+            
+            // Create the database using stancl/tenancy's manager
+            $result = $databaseManager->createDatabase($tempTenant);
+            
+            if ($result) {
+                Log::info("Physical database created using stancl/tenancy: {$databaseName}");
+            } else {
+                Log::warning("Database creation returned false: {$databaseName}");
+            }
+            
+        } catch (\Exception $e) {
+            // Fallback to direct SQL if stancl/tenancy fails
+            Log::warning("Stancl/tenancy database creation failed, using fallback: " . $e->getMessage());
+            
+            $connection = config('database.default');
+            $charset = config("database.connections.{$connection}.charset", 'utf8mb4');
+            $collation = config("database.connections.{$connection}.collation", 'utf8mb4_unicode_ci');
+            
+            // Validate database name to prevent SQL injection
+            if (!preg_match('/^[a-zA-Z0-9_]+$/', $databaseName)) {
+                throw new \Exception("Invalid database name: {$databaseName}");
+            }
+            
+            // Check if database already exists
+            $exists = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
+            
+            if (empty($exists)) {
+                DB::statement("CREATE DATABASE `{$databaseName}` CHARACTER SET {$charset} COLLATE {$collation}");
+                Log::info("Physical database created via fallback: {$databaseName}");
+            } else {
+                Log::info("Database already exists: {$databaseName}");
+            }
         }
     }
     
