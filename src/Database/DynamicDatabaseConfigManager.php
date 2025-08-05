@@ -53,24 +53,23 @@ class DynamicDatabaseConfigManager
     protected static function getOptimalMySQLOptions(): array
     {
         return array_filter([
-            // Basic SSL configuration
-            \PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+            // Basic SSL configuration (skip if null to avoid conflicts)
             
-            // Performance optimizations
-            \PDO::ATTR_PERSISTENT => true,
-            \PDO::ATTR_EMULATE_PREPARES => false,
-            \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true,
+            // Performance optimizations - ENSURE PROPER TYPES - DISABLED FOR NOW
+            // \PDO::ATTR_PERSISTENT => false, // Disabled to prevent conflicts
+            // \PDO::ATTR_EMULATE_PREPARES => false, // Disabled to prevent conflicts
+            // \PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => true, // Disabled to prevent conflicts
             
-            // Security settings
-            \PDO::MYSQL_ATTR_LOCAL_INFILE => false,
+            // Security settings - DISABLED FOR NOW
+            // \PDO::MYSQL_ATTR_LOCAL_INFILE => false, // Disabled to prevent conflicts
             
-            // Connection settings
-            \PDO::ATTR_TIMEOUT => 5,
-            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            // Connection settings - ENSURE INTEGER TYPES - DISABLED FOR NOW
+            // \PDO::ATTR_TIMEOUT => 5, // Disabled to prevent conflicts
+            // \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION, // Disabled to prevent conflicts
+            // \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC, // Disabled to prevent conflicts
             
             // Session-level MySQL settings (safe to use)
-            \PDO::MYSQL_ATTR_INIT_COMMAND => static::getMySQLInitCommand(),
+            \PDO::MYSQL_ATTR_INIT_COMMAND => static::getMySQLInitCommand(), // String
         ]);
     }
     

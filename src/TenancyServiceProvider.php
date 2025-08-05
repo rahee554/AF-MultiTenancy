@@ -50,8 +50,9 @@ class TenancyServiceProvider extends ServiceProvider
         // Merge our configuration with defaults
         $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
         
-        // Initialize dynamic database configuration
-        DynamicDatabaseConfigManager::initialize();
+        // DISABLE automatic dynamic database configuration to prevent conflicts
+        // Use the DiagnoseDatabaseCommand --fix flag to apply when needed
+        // DynamicDatabaseConfigManager::initialize();
     }
 
     /**
