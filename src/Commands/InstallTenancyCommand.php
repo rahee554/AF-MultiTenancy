@@ -76,21 +76,21 @@ class InstallTenancyCommand extends Command
      */
     protected function publishConfigurations(): void
     {
-        // Publish tenancy configurations
+        // First, publish stancl/tenancy configuration
         Artisan::call('vendor:publish', [
             '--tag' => 'tenancy-config',
             '--force' => true,
         ]);
         
-        $this->line('   ✅ tenancy.php configuration published');
+        $this->line('   ✅ stancl/tenancy configuration published');
         
-        // Publish artflow-tenancy configuration
+        // Then publish our enhanced configuration
         Artisan::call('vendor:publish', [
-            '--tag' => 'artflow-tenancy-config', 
+            '--tag' => 'af-tenancy-config', 
             '--force' => true,
         ]);
         
-        $this->line('   ✅ artflow-tenancy.php configuration published');
+        $this->line('   ✅ AF-Tenancy enhancements published');
     }
 
     /**

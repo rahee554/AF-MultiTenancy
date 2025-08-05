@@ -4,9 +4,9 @@
 [![Total Downloads](https://img.shields.io/packagist/dt/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 [![License](https://img.shields.io/packagist/l/artflow-studio/tenancy.svg?style=flat-square)](https://packagist.org/packages/artflow-studio/tenancy)
 
-**Version: 0.7.0.7** - Enterprise-grade Laravel multi-tenancy with intelligent asset handling
+**Enterprise-grade Laravel multi-tenancy built on top of stancl/tenancy**
 
-🚀 **High-Performance Laravel Multi-Tenancy** - Built on top of `stancl/tenancy` with enhanced features, smart middleware, comprehensive testing suite, and 100% tenant isolation.
+🚀 **Enhanced Multi-Tenancy** - Extends `stancl/tenancy` with status management, homepage functionality, enhanced CLI commands, and full Livewire compatibility.
 
 ## ✨ Key Features
 
