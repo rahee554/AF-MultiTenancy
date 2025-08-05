@@ -16,7 +16,9 @@ use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolver;
 use ArtflowStudio\Tenancy\Commands\WarmUpCacheCommand;
+use ArtflowStudio\Tenancy\Commands\DiagnoseDatabaseCommand;
 use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
+use ArtflowStudio\Tenancy\Database\DynamicDatabaseConfigManager;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -47,6 +49,9 @@ class TenancyServiceProvider extends ServiceProvider
 
         // Merge our configuration with defaults
         $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
+        
+        // Initialize dynamic database configuration
+        DynamicDatabaseConfigManager::initialize();
     }
 
     /**
@@ -91,6 +96,7 @@ class TenancyServiceProvider extends ServiceProvider
                 ComprehensiveTenancyTestCommand::class,
                 InstallTenancyCommand::class,
                 WarmUpCacheCommand::class,
+                DiagnoseDatabaseCommand::class,
             ]);
         }
 

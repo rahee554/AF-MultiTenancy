@@ -5,6 +5,7 @@ namespace ArtflowStudio\Tenancy\Database;
 use Illuminate\Support\Facades\DB;
 use Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager;
 use Stancl\Tenancy\Contracts\TenantWithDatabase;
+use ArtflowStudio\Tenancy\Database\DynamicDatabaseConfigManager;
 
 /**
  * High-performance MySQL Database Manager
@@ -38,13 +39,8 @@ class HighPerformanceMySQLDatabaseManager extends MySQLDatabaseManager
             $result = parent::createDatabase($tenant);
             
             if ($result) {
-                // Apply post-creation optimizations
-                $connection = $this->database();
-                
-                // Set database-specific optimizations
-                $connection->unprepared("USE `{$database}`");
-                $connection->unprepared("SET SESSION sql_mode='TRADITIONAL'");
-                $connection->unprepared("SET SESSION innodb_flush_log_at_trx_commit=2");
+                // Apply safe tenant-specific optimizations after creation
+                DynamicDatabaseConfigManager::applyTenantOptimizations($database);
                 
                 // Cache the result
                 static::$databaseExistenceCache[$database] = true;
