@@ -234,12 +234,19 @@ class ComprehensiveTestCommand extends Command
 
         // Test stancl/tenancy services
         try {
-            $tenancy = app('tenancy');
+            $tenancy = app(\Stancl\Tenancy\TenantManager::class);
             if ($tenancy) {
-                $this->testPassed('✅ stancl/tenancy service available');
+                $this->testPassed('✅ stancl/tenancy TenantManager available');
             }
         } catch (Exception $e) {
-            $this->addIssue('❌ stancl/tenancy service not available', 'Check stancl/tenancy installation');
+            $this->addIssue('❌ stancl/tenancy TenantManager not available', 'Check stancl/tenancy installation');
+        }
+
+        // Test tenant() helper function
+        if (function_exists('tenant')) {
+            $this->testPassed('✅ tenant() helper function available');
+        } else {
+            $this->addIssue('❌ tenant() helper function not available', 'Check stancl/tenancy installation');
         }
     }
 
@@ -286,7 +293,9 @@ class ComprehensiveTestCommand extends Command
                 // Test tenant database
                 $this->info('  Testing tenant database...');
                 try {
-                    Tenancy::initialize($tenant);
+                    // Use stancl's proper way to initialize tenancy
+                    $tenantManager = app(\Stancl\Tenancy\TenantManager::class);
+                    $tenantManager->initialize($tenant);
                     
                     // Test connection
                     $connection = $tenant->database();
@@ -294,7 +303,7 @@ class ComprehensiveTestCommand extends Command
                         $this->testPassed('  ✅ Tenant database connection working');
                     }
                     
-                    Tenancy::end();
+                    $tenantManager->end();
                     
                     // Cleanup test tenant
                     $tenant->delete();

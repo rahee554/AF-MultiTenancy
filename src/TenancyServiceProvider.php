@@ -17,6 +17,7 @@ use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
 use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
 use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
+use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -50,6 +51,7 @@ class TenancyServiceProvider extends ServiceProvider
                 TestPerformanceCommand::class,
                 ComprehensiveTenancyTestCommand::class,
                 \ArtflowStudio\Tenancy\Commands\ComprehensiveTestCommand::class,
+                QuickInstallTestCommand::class,
             ]);
         }
 
@@ -121,20 +123,17 @@ class TenancyServiceProvider extends ServiceProvider
             // Configure Livewire to work properly with tenants
             $this->app->booted(function () {
                 // Fix session issues in multi-tenant environment
-                if (function_exists('tenancy') && tenancy()->initialized()) {
-                    $tenant = tenancy()->tenant();
+                if (function_exists('tenant') && tenant()) {
+                    $tenant = tenant();
                     
                     // Set tenant-specific session configuration
                     config([
                         'session.cookie' => config('session.cookie') . '_' . $tenant->getKey(),
-                        'sanctum.stateful' => array_map(function ($domain) use ($tenant) {
-                            return $tenant->domains->pluck('domain')->toArray();
-                        }, config('sanctum.stateful', [])),
                     ]);
                 }
             });
 
-            // Register Livewire components if they exist
+            // Register Livewire middleware for tenancy
             if (file_exists(__DIR__ . '/Livewire')) {
                 Livewire::addPersistentMiddleware([
                     \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
