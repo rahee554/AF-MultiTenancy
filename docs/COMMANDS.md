@@ -4,11 +4,11 @@
 
 Compatible with: Laravel 10+ & 11+, stancl/tenancy v3+, Livewire 3+
 
-## � Command Categories
+## 📋 Command Categories
 
 1. [Installation Commands](#installation-commands)
-2. [Tenant Management](#tenant-management)
-3. [Database Operations](#database-operations)
+2. [Tenant Management](#tenant-management)  
+3. [**NEW: Database Operations**](#database-operations) 🆕
 4. [Testing & Validation](#testing--validation)
 5. [System Monitoring](#system-monitoring)
 6. [Development Tools](#development-tools)
@@ -147,30 +147,124 @@ php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --seed
 # Rollback tenant migrations
 php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --rollback
 ```
+---
 
-### Seeding Operations
+## 🗄️ Database Operations
+
+### **NEW: Dedicated Database Command** 🆕
+
+**Specialized database operations for individual or multiple tenants:**
+
 ```bash
-# Seed specific tenant database
+php artisan tenant:db {operation} [options]
+```
+
+#### **Migration Operations**
+```bash
+# Run migrations for specific tenant
+php artisan tenant:db migrate --tenant=uuid-123
+
+# Fresh migration (drops all tables)
+php artisan tenant:db migrate:fresh --tenant=uuid-123
+
+# Rollback migrations
+php artisan tenant:db migrate:rollback --step=3 --tenant=uuid-123
+
+# Show migration status
+php artisan tenant:db migrate:status --tenant=uuid-123
+
+# Migrate all active tenants
+php artisan tenant:db migrate --all
+
+# Dry run (see what would be migrated)
+php artisan tenant:db migrate --pretend --tenant=uuid-123
+```
+
+#### **Seeding Operations**
+```bash
+# Run database seeders
+php artisan tenant:db seed --tenant=uuid-123
+
+# Run specific seeder class
+php artisan tenant:db seed --class=UserSeeder --tenant=uuid-123
+
+# Fresh migrate + seed in one command
+php artisan tenant:db fresh-seed --tenant=uuid-123
+
+# Seed all active tenants
+php artisan tenant:db seed --all --class=UpdateSeeder
+```
+
+#### **Advanced Database Operations**
+```bash
+# Reset all migrations (rollback everything)
+php artisan tenant:db reset --tenant=uuid-123
+
+# Refresh migrations (rollback + re-migrate)
+php artisan tenant:db refresh --tenant=uuid-123
+
+# Interactive tenant selection
+php artisan tenant:db migrate
+# → Shows list of tenants to choose from
+
+# Bulk operations with status filter
+php artisan tenant:db migrate --all --status=inactive
+```
+
+#### **Smart Tenant Selection**
+The `tenant:db` command offers multiple ways to select tenants:
+
+1. **Interactive List** - Shows all tenants in a table, select by number
+2. **Search by Name** - Type partial name to find matching tenants  
+3. **UUID Entry** - Enter full tenant UUID
+4. **Command Line** - Specify `--tenant=uuid-or-name`
+
+```bash
+# Example interactive flow:
+php artisan tenant:db migrate
+
+# 🔍 Available tenant selection methods:
+# 1. List all tenants and select
+# 2. Search by name  
+# 3. Enter UUID directly
+# How would you like to select the tenant? [1]:
+```
+
+### Legacy Database Operations (Still Available)
+
+#### **Migration Operations**
+```bash
+# Run migrations for specific tenant (old way)
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4
+
+# Run migrations for all tenants (old way)
+php artisan tenant:manage migrate-all
+
+# Fresh migration (old way)
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --fresh
+```
+
+#### **Seeding Operations**
+```bash
+# Seed specific tenant database (old way)
 php artisan tenant:manage seed --tenant=550e8400-e29b-41d4
 
-# Seed all tenant databases
+# Seed all tenant databases (old way)  
 php artisan tenant:manage seed-all
 
-# Seed with specific seeder class
+# Seed with specific seeder class (old way)
 php artisan tenant:manage seed --tenant=550e8400-e29b-41d4 --class=UserSeeder
 ```
 
-### Database Utilities
-```bash
-# Diagnose database issues
-php artisan tenancy:diagnose-database
+### **Migration Recommendation** 💡
+**Use the new `tenant:db` command for all database operations - it's more powerful and user-friendly!**
 
-# Fix tenant database connections
-php artisan tenancy:fix-tenant-databases
-
-# Warm up database connections
-php artisan tenancy:warmup-cache
-```
+| Old Command | New Command | Benefits |
+|-------------|-------------|----------|
+| `tenant:manage migrate` | `tenant:db migrate` | Better tenant selection, dry-run mode |
+| `tenant:manage seed` | `tenant:db seed` | Specific seeder classes, bulk operations |
+| Not available | `tenant:db migrate:fresh` | Fresh migrations with safety checks |
+| Not available | `tenant:db migrate:rollback` | Flexible rollback with steps |
 
 ---
 

@@ -11,8 +11,10 @@ use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolverMiddleware;
 use ArtflowStudio\Tenancy\Commands\InstallTenancyCommand;
 use ArtflowStudio\Tenancy\Commands\TenantCommand;
+use ArtflowStudio\Tenancy\Commands\TenantDatabaseCommand;
 use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
 use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
@@ -46,6 +48,7 @@ class TenancyServiceProvider extends ServiceProvider
             $this->commands([
                 InstallTenancyCommand::class,
                 TenantCommand::class,
+                TenantDatabaseCommand::class,
                 HealthCheckCommand::class,
                 TestSystemCommand::class,
                 TestPerformanceCommand::class,
@@ -80,7 +83,7 @@ class TenancyServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register middleware
+     * Register middleware that works WITH stancl/tenancy
      */
     protected function registerMiddleware(): void
     {
@@ -97,38 +100,50 @@ class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('tenant.homepage', HomepageRedirectMiddleware::class);
         $router->aliasMiddleware('tenant.auth', \ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware::class);
         $router->aliasMiddleware('tenant.api', ApiAuthMiddleware::class);
+        $router->aliasMiddleware('smart-domain', SmartDomainResolverMiddleware::class);
 
-        // Register middleware groups that work WITH stancl/tenancy
-        // CRITICAL: Order matters! Tenancy must be initialized before sessions are scoped
+        // CRITICAL: Define middleware groups that work with stancl/tenancy patterns
+        
+        // For CENTRAL domain routes (management, admin interface)
+        // These routes are ONLY available on central domains and have no tenant context
+        $router->middlewareGroup('central.web', [
+            'web',                        // Laravel web middleware (sessions, CSRF, etc.)
+            'central',                    // Our central domain check
+        ]);
+
+        // For TENANT domain routes with full session scoping (main tenant application)
+        // These routes are ONLY available on tenant domains with full tenant isolation
         $router->middlewareGroup('tenant.web', [
             'web',                        // Laravel web middleware (includes sessions, CSRF, etc.)
             'tenant',                     // Initialize tenancy by domain (stancl/tenancy)
             'tenant.prevent-central',     // Prevent access from central domains (stancl/tenancy)
             'tenant.scope-sessions',      // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
-            'af-tenant',                 // Our enhancements (status checks, logging)
+            'af-tenant',                  // Our enhancements (status checks, logging)
         ]);
 
-        // For central domain routes (no tenancy)
-        $router->middlewareGroup('central.web', [
-            'web',
-        ]);
-
-        // For tenant API routes
+        // For TENANT API routes  
         $router->middlewareGroup('tenant.api', [
-            'api',                       // Laravel API middleware
-            'tenant',                    // Initialize tenancy by domain
-            'tenant.prevent-central',    // Prevent access from central domains
-            'tenant.scope-sessions',     // Scope sessions per tenant
-            'tenant.api',               // Our API enhancements
+            'api',                        // Laravel API middleware (no sessions, just API stuff)
+            'tenant',                     // Initialize tenancy by domain
+            'tenant.prevent-central',     // Prevent access from central domains
+            'tenant.api',                 // Our API enhancements
         ]);
 
-        // Special group for auth routes that need tenant context
+        // Special group for tenant AUTH routes that need enhanced logging
         $router->middlewareGroup('tenant.auth.web', [
-            'web',                       // Laravel web middleware
-            'tenant',                    // Initialize tenancy by domain
-            'tenant.prevent-central',    // Prevent access from central domains
-            'tenant.scope-sessions',     // Scope sessions per tenant
-            'tenant.auth',              // Our auth enhancements with logging
+            'web',                        // Laravel web middleware
+            'tenant',                     // Initialize tenancy by domain
+            'tenant.prevent-central',     // Prevent access from central domains
+            'tenant.scope-sessions',      // Scope sessions per tenant
+            'tenant.auth',                // Our auth enhancements with logging
+        ]);
+
+        // ✨ NEW: Smart Domain Resolver Middleware Group
+        // This intelligently detects if domain is central or tenant and applies appropriate context
+        // Perfect for shared routes like /login, /dashboard that work on both domain types
+        $router->middlewareGroup('central.tenant.web', [
+            'web',                        // Laravel web middleware (sessions, CSRF, etc.)
+            'smart-domain',               // Our smart domain detection and context application
         ]);
     }    /**
      * Configure Livewire for multi-tenancy
