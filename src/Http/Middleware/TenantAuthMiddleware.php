@@ -1,84 +1,160 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Http\Middleware;
+namespace ArtflowStudio\Tenancy;
 
-use Closure;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\ServiceProvider;
+use Illuminate\Routing\Router;
+use Livewire\Livewire;
+use ArtflowStudio\Tenancy\Services\TenantService;
+use ArtflowStudio\Tenancy\Services\TenantContextCache;
+use ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
+use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
+use ArtflowStudio\Tenancy\Commands\InstallTenancyCommand;
+use ArtflowStudio\Tenancy\Commands\TenantCommand;
+use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
+use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
+use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
+use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
+use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
 
-/**
- * Tenant Authentication Middleware
- * 
- * This middleware is designed to work with stancl/tenancy for auth routes.
- * It ensures proper tenant context is maintained during authentication.
- */
-class TenantAuthMiddleware
+class TenancyServiceProvider extends ServiceProvider
 {
     /**
-     * Handle an incoming request for authentication routes
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure  $next
-     * @return mixed
+     * Bootstrap any application services.
      */
-    public function handle(Request $request, Closure $next)
+    public function boot(): void
     {
-        // Skip tenancy for asset requests
-        if ($this->isAssetRequest($request)) {
-            return $next($request);
-        }
+        $this->loadRoutesFrom(__DIR__ . '/../routes/af-tenancy.php');
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'af-tenancy');
+        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
-        $domain = $request->getHost();
-        $centralDomains = config('tenancy.central_domains', []);
+        $this->publishes([
+            __DIR__ . '/../config/tenancy.php' => config_path('tenancy.php'),
+        ], 'tenancy-config');
 
-        // For central domains, skip tenant processing
-        if (in_array($domain, $centralDomains)) {
-            Log::debug('TenantAuthMiddleware: Central domain detected, skipping tenancy', [
-                'domain' => $domain
+        $this->publishes([
+            __DIR__ . '/../config/artflow-tenancy.php' => config_path('artflow-tenancy.php'),
+        ], 'af-tenancy-config');
+
+        $this->publishes([
+            __DIR__ . '/../resources/views' => resource_path('views/vendor/af-tenancy'),
+        ], 'af-tenancy-views');
+
+        if ($this->app->runningInConsole()) {
+            $this->commands([
+                InstallTenancyCommand::class,
+                TenantCommand::class,
+                HealthCheckCommand::class,
+                TestSystemCommand::class,
+                TestPerformanceCommand::class,
+                ComprehensiveTenancyTestCommand::class,
+                \ArtflowStudio\Tenancy\Commands\ComprehensiveTestCommand::class,
+                QuickInstallTestCommand::class,
             ]);
-            return $next($request);
         }
 
-        // For tenant domains, we let stancl/tenancy handle the heavy lifting
-        // This middleware just ensures logging and handles edge cases
-        
-        $response = $next($request);
-        
-        // Log tenant context after processing (if tenant was initialized)
-        if (function_exists('tenant') && tenant()) {
-            Log::debug('TenantAuthMiddleware: Request processed with tenant context', [
-                'domain' => $domain,
-                'tenant_id' => tenant('id'),
-                'route' => $request->route()?->getName(),
-            ]);
-        }
-        
-        return $response;
+        $this->registerMiddleware();
+        $this->configureLivewire();
     }
-    /**
-     * Check if this is an asset request
-     */
-    protected function isAssetRequest(Request $request): bool
-    {
-        $path = $request->path();
-        
-        // Asset file extensions
-        $assetExtensions = ['css', 'js', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'woff', 'woff2', 'ttf', 'eot', 'map'];
-        $extension = pathinfo($path, PATHINFO_EXTENSION);
-        
-        if (in_array(strtolower($extension), $assetExtensions)) {
-            return true;
-        }
 
-        // Asset directories
-        $assetDirs = ['build', 'assets', 'css', 'js', 'images', 'img', 'fonts', 'media', 'storage', 'vendor'];
-        
-        foreach ($assetDirs as $dir) {
-            if (str_starts_with($path, $dir . '/')) {
-                return true;
+    /**
+     * Register any application services.
+     */
+    public function register(): void
+    {
+        // Register stancl/tenancy service provider if not already loaded
+        $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
+
+        // Merge our configurations with stancl/tenancy
+        $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'tenancy');
+        $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
+
+        // Register our services
+        $this->app->singleton(TenantService::class);
+        $this->app->singleton(TenantContextCache::class);
+
+        // Register our event service provider
+        $this->app->register(\ArtflowStudio\Tenancy\Providers\EventServiceProvider::class);
+    }
+
+    /**
+     * Register middleware
+     */
+    protected function registerMiddleware(): void
+    {
+        $router = $this->app->make(Router::class);
+
+        // Register stancl/tenancy core middleware aliases for convenience
+        $router->aliasMiddleware('tenant', \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class);
+        $router->aliasMiddleware('tenant.prevent-central', \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class);
+        $router->aliasMiddleware('tenant.scope-sessions', \Stancl\Tenancy\Middleware\ScopeSessions::class);
+
+        // Register our enhanced middleware aliases
+        $router->aliasMiddleware('af-tenant', TenantMiddleware::class);
+        $router->aliasMiddleware('central', CentralDomainMiddleware::class);
+        $router->aliasMiddleware('tenant.homepage', HomepageRedirectMiddleware::class);
+        $router->aliasMiddleware('tenant.auth', \ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware::class);
+        $router->aliasMiddleware('tenant.api', ApiAuthMiddleware::class);
+
+        // Register middleware groups that work WITH stancl/tenancy
+        // CRITICAL: Order matters! Tenancy must be initialized before sessions are scoped
+        $router->middlewareGroup('tenant.web', [
+            'web',                        // Laravel web middleware (includes sessions, CSRF, etc.)
+            'tenant',                     // Initialize tenancy by domain (stancl/tenancy)
+            'tenant.prevent-central',     // Prevent access from central domains (stancl/tenancy)
+            'tenant.scope-sessions',      // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
+            'af-tenant',                 // Our enhancements (status checks, logging)
+        ]);
+
+        // For central domain routes (no tenancy)
+        $router->middlewareGroup('central.web', [
+            'web',
+        ]);
+
+        // For tenant API routes
+        $router->middlewareGroup('tenant.api', [
+            'api',                       // Laravel API middleware
+            'tenant',                    // Initialize tenancy by domain
+            'tenant.prevent-central',    // Prevent access from central domains
+            'tenant.scope-sessions',     // Scope sessions per tenant
+            'tenant.api',               // Our API enhancements
+        ]);
+
+        // Special group for auth routes that need tenant context
+        $router->middlewareGroup('tenant.auth.web', [
+            'web',                       // Laravel web middleware
+            'tenant',                    // Initialize tenancy by domain
+            'tenant.prevent-central',    // Prevent access from central domains
+            'tenant.scope-sessions',     // Scope sessions per tenant
+            'tenant.auth',              // Our auth enhancements with logging
+        ]);
+    }    /**
+     * Configure Livewire for multi-tenancy
+     */
+    protected function configureLivewire(): void
+    {
+        if (class_exists(Livewire::class)) {
+            // Configure Livewire to work properly with tenants
+            $this->app->booted(function () {
+                // Fix session issues in multi-tenant environment
+                if (function_exists('tenant') && tenant()) {
+                    $tenant = tenant();
+                    
+                    // Set tenant-specific session configuration
+                    config([
+                        'session.cookie' => config('session.cookie') . '_' . $tenant->getKey(),
+                    ]);
+                }
+            });
+
+            // Register Livewire middleware for tenancy
+            if (file_exists(__DIR__ . '/Livewire')) {
+                Livewire::addPersistentMiddleware([
+                    \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+                ]);
             }
         }
-
-        return false;
     }
 }

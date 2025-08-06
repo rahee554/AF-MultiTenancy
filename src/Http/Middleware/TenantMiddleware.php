@@ -4,7 +4,6 @@ namespace ArtflowStudio\Tenancy\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Stancl\Tenancy\Facades\Tenancy;
 use ArtflowStudio\Tenancy\Models\Tenant;
 
 /**
@@ -26,30 +25,39 @@ class TenantMiddleware
     {
         // This middleware only adds enhancements - stancl/tenancy handles the core logic
         
-        // Check if tenancy is already initialized by stancl/tenancy
-        if (Tenancy::initialized()) {
-            $tenant = Tenancy::tenant();
-            
+        // Check if tenancy is initialized by checking if tenant() helper returns a value
+        $currentTenant = tenant();
+        
+        if ($currentTenant) {
             // Our enhancements on top of stancl/tenancy:
             
-            // 1. Check tenant status (our custom feature)
-            if ($tenant instanceof Tenant) {
-                if ($tenant->status === 'blocked') {
-                    abort(403, 'This tenant is currently blocked. Please contact support.');
-                }
-                
-                if ($tenant->status === 'inactive') {
-                    abort(404, 'Tenant not found.');
+            // 1. Check tenant status (our custom feature) if using our enhanced tenant model
+            if ($currentTenant instanceof Tenant) {
+                if (isset($currentTenant->status)) {
+                    if ($currentTenant->status === 'blocked') {
+                        abort(403, 'This tenant is currently blocked. Please contact support.');
+                    }
+                    
+                    if ($currentTenant->status === 'inactive') {
+                        abort(404, 'Tenant not found.');
+                    }
                 }
             }
             
-            // 2. Update last accessed timestamp (our custom feature)
-            if ($tenant instanceof Tenant && !$request->isMethod('HEAD')) {
-                $tenant->update(['last_accessed_at' => now()]);
+            // 2. Update last accessed timestamp (our custom feature) if tenant supports it
+            if ($currentTenant instanceof Tenant && 
+                !$request->isMethod('HEAD') && 
+                $currentTenant->getFillable() && 
+                in_array('last_accessed_at', $currentTenant->getFillable())) {
+                try {
+                    $currentTenant->update(['last_accessed_at' => now()]);
+                } catch (\Exception $e) {
+                    // Silently fail if update doesn't work - don't break the request
+                }
             }
-            
+               
             // 3. Set view data for templates (our custom feature)
-            view()->share('currentTenant', $tenant);
+            view()->share('currentTenant', $currentTenant);
         }
         
         return $next($request);

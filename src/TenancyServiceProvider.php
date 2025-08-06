@@ -17,7 +17,7 @@ use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
 use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
 use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
-//use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
+use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -51,6 +51,7 @@ class TenancyServiceProvider extends ServiceProvider
                 TestPerformanceCommand::class,
                 ComprehensiveTenancyTestCommand::class,
                 \ArtflowStudio\Tenancy\Commands\ComprehensiveTestCommand::class,
+                QuickInstallTestCommand::class,
             ]);
         }
 
@@ -63,10 +64,8 @@ class TenancyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        // First, register stancl/tenancy service provider
-        if (!$this->app->providerIsLoaded(\Stancl\Tenancy\TenancyServiceProvider::class)) {
-            $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
-        }
+        // Register stancl/tenancy service provider if not already loaded
+        $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
 
         // Merge our configurations with stancl/tenancy
         $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'tenancy');
@@ -87,33 +86,51 @@ class TenancyServiceProvider extends ServiceProvider
     {
         $router = $this->app->make(Router::class);
 
-        // Register individual middleware
+        // Register stancl/tenancy core middleware aliases for convenience
+        $router->aliasMiddleware('tenant', \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class);
+        $router->aliasMiddleware('tenant.prevent-central', \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class);
+        $router->aliasMiddleware('tenant.scope-sessions', \Stancl\Tenancy\Middleware\ScopeSessions::class);
+
+        // Register our enhanced middleware aliases
         $router->aliasMiddleware('af-tenant', TenantMiddleware::class);
         $router->aliasMiddleware('central', CentralDomainMiddleware::class);
         $router->aliasMiddleware('tenant.homepage', HomepageRedirectMiddleware::class);
+        $router->aliasMiddleware('tenant.auth', \ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware::class);
         $router->aliasMiddleware('tenant.api', ApiAuthMiddleware::class);
 
         // Register middleware groups that work WITH stancl/tenancy
+        // CRITICAL: Order matters! Tenancy must be initialized before sessions are scoped
         $router->middlewareGroup('tenant.web', [
-            'web',
-            \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
-            \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
-            TenantMiddleware::class, // Our enhancements
+            'web',                        // Laravel web middleware (includes sessions, CSRF, etc.)
+            'tenant',                     // Initialize tenancy by domain (stancl/tenancy)
+            'tenant.prevent-central',     // Prevent access from central domains (stancl/tenancy)
+            'tenant.scope-sessions',      // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
+            'af-tenant',                 // Our enhancements (status checks, logging)
         ]);
 
+        // For central domain routes (no tenancy)
         $router->middlewareGroup('central.web', [
             'web',
         ]);
 
+        // For tenant API routes
         $router->middlewareGroup('tenant.api', [
-            'api',
-            \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
-            \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
-            ApiAuthMiddleware::class,
+            'api',                       // Laravel API middleware
+            'tenant',                    // Initialize tenancy by domain
+            'tenant.prevent-central',    // Prevent access from central domains
+            'tenant.scope-sessions',     // Scope sessions per tenant
+            'tenant.api',               // Our API enhancements
         ]);
-    }
 
-    /**
+        // Special group for auth routes that need tenant context
+        $router->middlewareGroup('tenant.auth.web', [
+            'web',                       // Laravel web middleware
+            'tenant',                    // Initialize tenancy by domain
+            'tenant.prevent-central',    // Prevent access from central domains
+            'tenant.scope-sessions',     // Scope sessions per tenant
+            'tenant.auth',              // Our auth enhancements with logging
+        ]);
+    }    /**
      * Configure Livewire for multi-tenancy
      */
     protected function configureLivewire(): void
@@ -121,23 +138,13 @@ class TenancyServiceProvider extends ServiceProvider
         if (class_exists(Livewire::class)) {
             // Configure Livewire to work properly with tenants
             $this->app->booted(function () {
-                // Fix session issues in multi-tenant environment
-                if (function_exists('tenant') && tenant()) {
-                    $tenant = tenant();
-                    
-                    // Set tenant-specific session configuration
-                    config([
-                        'session.cookie' => config('session.cookie') . '_' . $tenant->getKey(),
-                    ]);
-                }
-            });
-
-            // Register Livewire middleware for tenancy
-            if (file_exists(__DIR__ . '/Livewire')) {
+                // Livewire middleware for tenancy
+                // Note: Session scoping is handled by ScopeSessions middleware in the middleware groups
                 Livewire::addPersistentMiddleware([
                     \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+                    \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
                 ]);
-            }
+            });
         }
     }
 }
