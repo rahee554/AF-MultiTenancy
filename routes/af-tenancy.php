@@ -27,6 +27,13 @@ use ArtflowStudio\Tenancy\Http\Controllers\RealTimeMonitoringController;
 |
 */
 
+// Get middleware config once at the top
+$middleware = config('artflow-tenancy.middleware', [
+    'ui' => ['web'],
+    'api' => ['tenancy.api'],
+    'admin' => ['web'],
+]);
+
 // ========================================
 // CENTRAL DOMAIN ROUTES ONLY
 // ========================================
@@ -55,115 +62,92 @@ Route::middleware(['central.web'])
                 Route::put('/tenants/{tenant}', [TenantViewController::class, 'update'])->name('tenants.update');
                 Route::delete('/tenants/{tenant}', [TenantViewController::class, 'destroy'])->name('tenants.destroy');
                 
-                // Performance monitoring web interface
-                Route::get('/monitor', [TenantViewController::class, 'monitor'])->name('monitor');
-                Route::get('/monitor/performance', [TenantViewController::class, 'performanceMonitor'])->name('monitor.performance');
-                Route::get('/monitor/health', [TenantViewController::class, 'healthMonitor'])->name('monitor.health');
+                // Tenant status management
+                Route::put('/tenants/{tenant}/activate', [TenantViewController::class, 'activate'])->name('tenants.activate');
+                Route::put('/tenants/{tenant}/deactivate', [TenantViewController::class, 'deactivate'])->name('tenants.deactivate');
+                Route::put('/tenants/{tenant}/suspend', [TenantViewController::class, 'suspend'])->name('tenants.suspend');
+                Route::put('/tenants/{tenant}/block', [TenantViewController::class, 'block'])->name('tenants.block');
                 
-                // Batch operations web interface
-                Route::get('/batch', [TenantViewController::class, 'batchOperations'])->name('batch');
-                Route::post('/batch/create-test-tenants', [TenantViewController::class, 'createTestTenants'])->name('batch.create-test');
-                Route::post('/batch/cleanup', [TenantViewController::class, 'cleanup'])->name('batch.cleanup');
+                // Tenant database operations
+                Route::post('/tenants/{tenant}/migrate', [TenantViewController::class, 'migrate'])->name('tenants.migrate');
+                Route::post('/tenants/{tenant}/migrate/fresh', [TenantViewController::class, 'migrateFresh'])->name('tenants.migrate.fresh');
+                Route::post('/tenants/{tenant}/seed', [TenantViewController::class, 'seed'])->name('tenants.seed');
                 
-                // Settings and configuration
-                Route::get('/settings', [TenantViewController::class, 'settings'])->name('settings');
-                Route::post('/settings', [TenantViewController::class, 'updateSettings'])->name('settings.update');
+                // System health and monitoring
+                Route::get('/health', [TenantViewController::class, 'health'])->name('health');
+                Route::get('/stats', [TenantViewController::class, 'stats'])->name('stats');
             });
-        
-        // Central domain API endpoints for tenant management
+            
+        // Central domain API routes for tenant management
         Route::prefix('api/tenancy')
             ->name('api.tenancy.')
             ->group(function () {
                 
-                // Health and system status
-                Route::get('health', [TenantApiController::class, 'apiHealth'])->name('health');
-                Route::get('stats', [TenantApiController::class, 'apiStats'])->name('stats');
+                // Tenant CRUD API
+                Route::get('/tenants', [TenantApiController::class, 'index'])->name('tenants.index');
+                Route::post('/tenants', [TenantApiController::class, 'store'])->name('tenants.store');
+                Route::get('/tenants/{tenant}', [TenantApiController::class, 'show'])->name('tenants.show');
+                Route::put('/tenants/{tenant}', [TenantApiController::class, 'update'])->name('tenants.update');
+                Route::delete('/tenants/{tenant}', [TenantApiController::class, 'destroy'])->name('tenants.destroy');
                 
-                // Tenant management API
-                Route::get('tenants', [TenantApiController::class, 'index'])->name('tenants.index');
-                Route::post('tenants', [TenantApiController::class, 'store'])->name('tenants.store');
-                Route::get('tenants/{id}', [TenantApiController::class, 'show'])->name('tenants.show');
-                Route::put('tenants/{id}', [TenantApiController::class, 'update'])->name('tenants.update');
-                Route::delete('tenants/{id}', [TenantApiController::class, 'destroy'])->name('tenants.destroy');
+                // Tenant operations API
+                Route::post('/tenants/{tenant}/migrate', [TenantApiController::class, 'migrate'])->name('tenants.migrate');
+                Route::post('/tenants/{tenant}/seed', [TenantApiController::class, 'seed'])->name('tenants.seed');
+                Route::post('/tenants/migrate-all', [TenantApiController::class, 'migrateAll'])->name('tenants.migrate-all');
                 
-                // Tenant operations
-                Route::post('tenants/{id}/activate', [TenantApiController::class, 'activate'])->name('tenants.activate');
-                Route::post('tenants/{id}/deactivate', [TenantApiController::class, 'deactivate'])->name('tenants.deactivate');
-                Route::post('tenants/{id}/migrate', [TenantApiController::class, 'migrate'])->name('tenants.migrate');
+                // System API
+                Route::get('/health', [TenantApiController::class, 'health'])->name('health');
+                Route::get('/stats', [TenantApiController::class, 'stats'])->name('stats');
+                Route::get('/system-info', [TenantApiController::class, 'systemInfo'])->name('system-info');
                 
-                // Real-time monitoring API
-                Route::get('monitor/performance', [RealTimeMonitoringController::class, 'performance'])->name('monitor.performance');
-                Route::get('monitor/connections', [RealTimeMonitoringController::class, 'connections'])->name('monitor.connections');
-                Route::get('monitor/memory', [RealTimeMonitoringController::class, 'memory'])->name('monitor.memory');
-                Route::get('monitor/overview', [RealTimeMonitoringController::class, 'overview'])->name('monitor.overview');
-                
-                // Batch operations API
-                Route::post('tenants/batch/create', [TenantApiController::class, 'batchCreate'])->name('tenants.batch.create');
-                Route::post('tenants/batch/delete', [TenantApiController::class, 'batchDelete'])->name('tenants.batch.delete');
-                Route::post('tenants/batch/migrate', [TenantApiController::class, 'batchMigrate'])->name('tenants.batch.migrate');
-                
-                // Performance testing API
-                Route::post('test/performance', [TenantApiController::class, 'testPerformance'])->name('test.performance');
-                Route::post('test/isolation', [TenantApiController::class, 'testIsolation'])->name('test.isolation');
-                Route::get('test/status', [TenantApiController::class, 'getTestStatus'])->name('test.status');
+                // Real-time monitoring
+                Route::get('/monitoring/live-stats', [RealTimeMonitoringController::class, 'liveStats'])->name('monitoring.live-stats');
+                Route::get('/monitoring/connections', [RealTimeMonitoringController::class, 'connections'])->name('monitoring.connections');
+                Route::get('/monitoring/performance', [RealTimeMonitoringController::class, 'performance'])->name('monitoring.performance');
             });
     });
 
 // ========================================
-// TENANT DOMAIN ROUTES ONLY  
+// TENANT CONTEXT ROUTES
 // ========================================
-
-// These routes are ONLY for tenant domains (tenant1.yourdomain.com, tenant2.yourdomain.com, etc.)
-// They will be BLOCKED on central domains automatically by stancl/tenancy
 
 Route::middleware(['tenant.web'])
-    ->group(function () {
+    ->group(function () use ($middleware) {
         
-        // Tenant-specific admin/management interface
-        Route::prefix('admin')
-            ->name('tenant.admin.')
+        // Tenant-specific UI routes
+        Route::prefix('tenant')
+            ->middleware($middleware['ui'])
+            ->name('tenant.')
             ->group(function () {
-                Route::get('/', [TenantViewController::class, 'tenantDashboard'])->name('dashboard');
-                Route::get('/info', [TenantViewController::class, 'tenantInfo'])->name('info');
-            });
-        
-        // Tenant-specific API endpoints
-        Route::prefix('api/tenant')
-            ->name('tenant.api.')
-            ->group(function () {
-                Route::get('info', [TenantApiController::class, 'tenantInfo'])->name('info');
-                Route::get('stats', [TenantApiController::class, 'tenantStats'])->name('stats');
-                Route::post('test-isolation', [TenantApiController::class, 'testTenantIsolation'])->name('test-isolation');
+                
+                // Tenant information display
+                Route::get('info', [TenantViewController::class, 'tenantInfo'])->name('info');
             });
     });
 
 // ========================================
-// DEVELOPMENT & TESTING ROUTES
+// TENANT CONTEXT API ROUTES
 // ========================================
 
-if (app()->environment(['local', 'testing'])) {
-    
-    // Development utilities - available on CENTRAL domain only
-    Route::middleware(['central.web'])
-        ->prefix('tenancy/dev')
-        ->name('tenancy.dev.')
-        ->group(function () {
-            
-            Route::get('phpinfo', function () {
-                return phpinfo();
-            })->name('phpinfo');
-            
-            Route::get('clear-cache', function () {
-                Artisan::call('cache:clear');
-                Artisan::call('config:clear');
-                return 'Cache cleared';
-            })->name('clear-cache');
-            
-            // Database testing utilities
-            Route::get('test-connections', [TenantApiController::class, 'testConnections'])->name('test-connections');
-            Route::get('stress-test', [TenantApiController::class, 'stressTest'])->name('stress-test');
-        });
-}
+Route::middleware(['tenant'])
+    ->group(function () use ($middleware) {
+        
+        // Tenant-specific API routes
+        Route::prefix('api/tenant')
+            ->middleware($middleware['api'])
+            ->group(function () {
+                Route::get('info', [TenantApiController::class, 'tenantInfo']);
+                Route::get('stats', [TenantApiController::class, 'tenantStats']);
+                Route::get('health', [TenantApiController::class, 'tenantHealth']);
+                
+                // Real-time monitoring for tenant
+                Route::get('monitoring/stats', [RealTimeMonitoringController::class, 'tenantStats']);
+                Route::get('monitoring/activity', [RealTimeMonitoringController::class, 'tenantActivity']);
+            });
+    });
+
+// ========================================
+// ADMIN ROUTES (BOTH CENTRAL AND TENANT CONTEXTS)
 // ========================================
 
 Route::prefix('tenancy')
@@ -184,61 +168,31 @@ Route::prefix('tenancy')
         Route::put('/tenants/{tenant}', [TenantViewController::class, 'update'])->name('tenants.update');
         Route::delete('/tenants/{tenant}', [TenantViewController::class, 'destroy'])->name('tenants.destroy');
         
-        // Performance monitoring web interface
-        Route::get('/monitor', [TenantViewController::class, 'monitor'])->name('monitor');
-        Route::get('/monitor/performance', [TenantViewController::class, 'performanceMonitor'])->name('monitor.performance');
-        Route::get('/monitor/health', [TenantViewController::class, 'healthMonitor'])->name('monitor.health');
+        // Tenant status management
+        Route::put('/tenants/{tenant}/activate', [TenantViewController::class, 'activate'])->name('tenants.activate');
+        Route::put('/tenants/{tenant}/deactivate', [TenantViewController::class, 'deactivate'])->name('tenants.deactivate');
+        Route::put('/tenants/{tenant}/suspend', [TenantViewController::class, 'suspend'])->name('tenants.suspend');
+        Route::put('/tenants/{tenant}/block', [TenantViewController::class, 'block'])->name('tenants.block');
         
-        // Batch operations web interface
-        Route::get('/batch', [TenantViewController::class, 'batchOperations'])->name('batch');
-        Route::post('/batch/create-test-tenants', [TenantViewController::class, 'createTestTenants'])->name('batch.create-test');
-        Route::post('/batch/cleanup', [TenantViewController::class, 'cleanup'])->name('batch.cleanup');
+        // Tenant database operations
+        Route::post('/tenants/{tenant}/migrate', [TenantViewController::class, 'migrate'])->name('tenants.migrate');
+        Route::post('/tenants/{tenant}/migrate/fresh', [TenantViewController::class, 'migrateFresh'])->name('tenants.migrate.fresh');
+        Route::post('/tenants/{tenant}/seed', [TenantViewController::class, 'seed'])->name('tenants.seed');
         
-        // Settings and configuration
-        Route::get('/settings', [TenantViewController::class, 'settings'])->name('settings');
-        Route::post('/settings', [TenantViewController::class, 'updateSettings'])->name('settings.update');
+        // System health and monitoring
+        Route::get('/health', [TenantViewController::class, 'health'])->name('health');
+        Route::get('/stats', [TenantViewController::class, 'stats'])->name('stats');
     });
 
 // ========================================
-// TENANT CONTEXT ROUTES
-// ========================================
-
-Route::middleware(['tenant'])
-    ->group(function () {
-        
-        // Get middleware config inside closure
-        $middleware = config('artflow-tenancy.middleware', [
-            'ui' => ['web'],
-            'api' => ['tenancy.api'],
-            'admin' => ['web'],
-        ]);
-        
-        // Tenant-specific API routes
-        Route::prefix('api/tenant')
-            ->middleware($middleware['api'])
-            ->group(function () {
-                Route::get('info', [TenantApiController::class, 'tenantInfo']);
-                Route::get('stats', [TenantApiController::class, 'tenantStats']);
-                Route::post('test-isolation', [TenantApiController::class, 'testTenantIsolation']);
-            });
-        
-        // Tenant-specific web routes
-        Route::prefix('tenant')
-            ->middleware($middleware['ui'])
-            ->name('tenant.')
-            ->group(function () {
-                Route::get('dashboard', [TenantViewController::class, 'tenantDashboard'])->name('dashboard');
-                Route::get('info', [TenantViewController::class, 'tenantInfo'])->name('info');
-            });
-    });
-
-// ========================================
-// DEVELOPMENT & TESTING ROUTES
+// DEVELOPMENT & TESTING ROUTES  
 // ========================================
 
 if (app()->environment(['local', 'testing'])) {
-    Route::prefix('tenancy/dev')
-        ->middleware($middleware['admin'])
+    
+    // Development utilities - available on CENTRAL domain only
+    Route::middleware(['central.web'])
+        ->prefix('tenancy/dev')
         ->name('tenancy.dev.')
         ->group(function () {
             

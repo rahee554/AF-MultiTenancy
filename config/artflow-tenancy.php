@@ -35,6 +35,31 @@ return [
         'auto_migrate' => env('TENANT_AUTO_MIGRATE', false),
         'tenant_migrations_path' => 'database/migrations/tenant',
         'shared_migrations_path' => 'database/migrations',
+        'auto_sync' => env('TENANT_AUTO_SYNC_MIGRATIONS', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Seeder Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for tenant seeders.
+    |
+    */
+
+    'seeders' => [
+        'auto_seed' => env('TENANT_AUTO_SEED', false),
+        'default_seeders' => [
+            // List of default seeders to run for new tenants
+        ],
+        'tenant_seeders_path' => 'database/seeders/tenant',
+        'shared_seeders_path' => 'database/seeders',
+        'skip_seeders' => [
+            'DatabaseSeeder',
+            'CreateTenantsSeeder',
+            'CreateDomainsSeeder',
+        ],
+        'auto_sync' => env('TENANT_AUTO_SYNC_SEEDERS', false),
     ],
 
     /*
@@ -117,22 +142,6 @@ return [
         'route_prefix' => 'admin',
         'middleware' => ['web', 'auth'],
         'layout' => 'layouts.admin.app',
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Seeder Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for tenant seeders.
-    |
-    */
-
-    'seeders' => [
-        'auto_seed' => env('TENANT_AUTO_SEED', false),
-        'default_seeders' => [
-            // List of default seeders to run for new tenants
-        ],
     ],
 
     /*

@@ -7,6 +7,7 @@ use ArtflowStudio\Tenancy\Services\TenantService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Artisan;
+use Stancl\Tenancy\Facades\Tenancy;
 
 class TenantDatabaseCommand extends Command
 {
@@ -44,6 +45,7 @@ class TenantDatabaseCommand extends Command
             'fresh-seed' => 'Fresh migrate + seed in one command',
             'reset' => 'Rollback all migrations',
             'refresh' => 'Rollback and re-run migrations',
+            'sync' => 'Sync migrations/seeders from shared to tenant directories',
         ];
 
         if (!$operation) {
@@ -94,9 +96,12 @@ class TenantDatabaseCommand extends Command
         
         if ($tenantIdentifier) {
             // Try to find by UUID first, then by name
-            $tenant = Tenant::where('id', $tenantIdentifier)
-                           ->orWhere('name', 'LIKE', "%{$tenantIdentifier}%")
-                           ->first();
+            $tenant = Tenant::where('id', $tenantIdentifier)->first();
+            
+            if (!$tenant) {
+                // Try searching by name if UUID not found
+                $tenant = Tenant::where('name', 'LIKE', "%{$tenantIdentifier}%")->first();
+            }
                            
             if ($tenant) {
                 $this->displaySelectedTenant($tenant);
@@ -121,21 +126,17 @@ class TenantDatabaseCommand extends Command
         $this->info('3. Enter UUID directly');
         
         $method = $this->choice('How would you like to select the tenant?', [
-            '1' => 'List and select',
-            '2' => 'Search by name', 
-            '3' => 'Enter UUID'
-        ], '1');
+            'List and select',
+            'Search by name', 
+            'Enter UUID'
+        ], 'List and select');
 
-        switch ($method) {
-            case '1':
-                return $this->selectFromList();
-            case '2':
-                return $this->searchByName();
-            case '3':
-                return $this->selectByUuid();
-            default:
-                return null;
-        }
+        return match ($method) {
+            'List and select' => $this->selectFromList(),
+            'Search by name' => $this->searchByName(),
+            'Enter UUID' => $this->selectByUuid(),
+            default => null
+        };
     }
 
     /**
@@ -153,7 +154,7 @@ class TenantDatabaseCommand extends Command
         $tenants = $query->orderBy('name')->get();
 
         if ($tenants->isEmpty()) {
-            $this->error('❌ No tenants found');
+            $this->error("❌ No {$status} tenants found");
             return null;
         }
 
@@ -174,19 +175,20 @@ class TenantDatabaseCommand extends Command
 
         $this->table($headers, $rows);
 
-        // Create choices for selection
-        $choices = $tenants->mapWithKeys(function ($tenant, $index) {
+        // Create choices for selection - simple array with tenant names and numbers
+        $choices = [];
+        foreach ($tenants as $index => $tenant) {
             $primaryDomain = $tenant->domains()->first();
             $domainText = $primaryDomain ? " ({$primaryDomain->domain})" : "";
-            return [
-                $index + 1 => "{$tenant->name}{$domainText}"
-            ];
-        })->toArray();
+            $choices[] = "{$tenant->name}{$domainText}";
+        }
 
         $selection = $this->choice('Select a tenant', $choices);
-        $selectedIndex = array_search($selection, $choices) - 1;
         
+        // Find the selected tenant by matching the choice text
+        $selectedIndex = array_search($selection, $choices);
         $tenant = $tenants->get($selectedIndex);
+        
         $this->displaySelectedTenant($tenant);
         
         return $tenant;
@@ -222,14 +224,16 @@ class TenantDatabaseCommand extends Command
 
         // Multiple matches - let user choose
         $this->info("🔍 Found {$tenants->count()} matching tenants:");
-        $choices = $tenants->mapWithKeys(function ($tenant, $index) {
+        $choices = [];
+        foreach ($tenants as $tenant) {
             $primaryDomain = $tenant->domains()->first();
             $domainText = $primaryDomain ? " ({$primaryDomain->domain})" : "";
-            return [$index => "{$tenant->name}{$domainText}"];
-        })->toArray();
+            $choices[] = "{$tenant->name}{$domainText}";
+        }
 
         $selection = $this->choice('Select the correct tenant', $choices);
-        $tenant = $tenants->get($selection);
+        $selectedIndex = array_search($selection, $choices);
+        $tenant = $tenants->get($selectedIndex);
         
         $this->displaySelectedTenant($tenant);
         return $tenant;
@@ -291,6 +295,7 @@ class TenantDatabaseCommand extends Command
                 'fresh-seed' => $this->runFreshSeed($tenant),
                 'reset' => $this->runReset($tenant),
                 'refresh' => $this->runRefresh($tenant),
+                'sync' => $this->runSync(),
                 default => $this->showHelp([])
             };
         } catch (\Exception $e) {
@@ -313,9 +318,12 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
         $exitCode = Artisan::call('migrate', [
             '--force' => true,
             '--pretend' => $this->option('pretend'),
+            '--path' => $tenantMigrationsPath,
         ]);
 
         $output = Artisan::output();
@@ -352,8 +360,11 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
         $exitCode = Artisan::call('migrate:fresh', [
             '--force' => true,
+            '--path' => $tenantMigrationsPath,
         ]);
 
         $output = Artisan::output();
@@ -385,9 +396,12 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
         $exitCode = Artisan::call('migrate:rollback', [
             '--step' => (int)$step,
             '--force' => true,
+            '--path' => $tenantMigrationsPath,
         ]);
 
         $output = Artisan::output();
@@ -413,7 +427,11 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
-        $exitCode = Artisan::call('migrate:status');
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
+        $exitCode = Artisan::call('migrate:status', [
+            '--path' => $tenantMigrationsPath,
+        ]);
         $output = Artisan::output();
         $this->line($output);
 
@@ -441,6 +459,17 @@ class TenantDatabaseCommand extends Command
         
         if ($class && $class !== 'DatabaseSeeder') {
             $params['--class'] = $class;
+        }
+        
+        // Check if tenant seeder exists first
+        $tenantSeedersPath = config('artflow-tenancy.seeders.tenant_seeders_path', 'database/seeders/tenant');
+        $seederFile = base_path($tenantSeedersPath . '/' . $class . '.php');
+        
+        if (file_exists($seederFile)) {
+            $this->info("📁 Using tenant-specific seeder from: {$tenantSeedersPath}");
+            // For tenant seeders, we might need to adjust the class namespace
+        } else {
+            $this->info("📁 Using shared seeder");
         }
         
         $exitCode = Artisan::call('db:seed', $params);
@@ -488,7 +517,12 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
-        $exitCode = Artisan::call('migrate:reset', ['--force' => true]);
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
+        $exitCode = Artisan::call('migrate:reset', [
+            '--force' => true,
+            '--path' => $tenantMigrationsPath,
+        ]);
         $output = Artisan::output();
         $this->line($output);
 
@@ -506,7 +540,12 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
         
-        $exitCode = Artisan::call('migrate:refresh', ['--force' => true]);
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        
+        $exitCode = Artisan::call('migrate:refresh', [
+            '--force' => true,
+            '--path' => $tenantMigrationsPath,
+        ]);
         $output = Artisan::output();
         $this->line($output);
 
@@ -517,6 +556,163 @@ class TenantDatabaseCommand extends Command
         }
 
         return $exitCode;
+    }
+
+    /**
+     * Sync migrations and seeders from shared to tenant directories
+     */
+    private function runSync(): int
+    {
+        $this->info("🔄 Syncing migrations and seeders to tenant directories");
+        $this->newLine();
+
+        $config = config('artflow-tenancy');
+        
+        // Get paths
+        $sharedMigrationsPath = base_path($config['migrations']['shared_migrations_path']);
+        $tenantMigrationsPath = base_path($config['migrations']['tenant_migrations_path']);
+        $sharedSeedersPath = base_path($config['seeders']['shared_seeders_path']);
+        $tenantSeedersPath = base_path($config['seeders']['tenant_seeders_path']);
+        
+        // Get skip lists
+        $skipMigrations = $config['migrations']['skip_migrations'] ?? [];
+        $skipSeeders = $config['seeders']['skip_seeders'] ?? [];
+
+        $results = [
+            'migrations_copied' => 0,
+            'migrations_skipped' => 0,
+            'seeders_copied' => 0,
+            'seeders_skipped' => 0,
+        ];
+
+        // Sync Migrations
+        $this->info("📁 Syncing migrations...");
+        $this->syncMigrations($sharedMigrationsPath, $tenantMigrationsPath, $skipMigrations, $results);
+        
+        $this->newLine();
+        
+        // Sync Seeders (optional)
+        $syncSeeders = $this->confirm('Do you want to sync seeders as well?', true);
+        if ($syncSeeders) {
+            $this->info("🌱 Syncing seeders...");
+            $this->syncSeeders($sharedSeedersPath, $tenantSeedersPath, $skipSeeders, $results);
+        }
+
+        // Display results
+        $this->newLine();
+        $this->info("📊 Sync Summary:");
+        $this->info("   📁 Migrations copied: {$results['migrations_copied']}");
+        $this->info("   ⏭️  Migrations skipped: {$results['migrations_skipped']}");
+        if ($syncSeeders) {
+            $this->info("   🌱 Seeders copied: {$results['seeders_copied']}");
+            $this->info("   ⏭️  Seeders skipped: {$results['seeders_skipped']}");
+        }
+
+        $totalOperations = $results['migrations_copied'] + ($syncSeeders ? $results['seeders_copied'] : 0);
+        
+        if ($totalOperations > 0) {
+            $this->info("✅ Sync completed successfully!");
+            return 0;
+        } else {
+            $this->info("ℹ️  No files needed syncing");
+            return 0;
+        }
+    }
+
+    /**
+     * Sync migrations from shared to tenant directory
+     */
+    private function syncMigrations(string $sourcePath, string $targetPath, array $skipList, array &$results): void
+    {
+        if (!is_dir($sourcePath)) {
+            $this->warn("⚠️  Shared migrations directory not found: {$sourcePath}");
+            return;
+        }
+
+        // Create tenant migrations directory if it doesn't exist
+        if (!is_dir($targetPath)) {
+            mkdir($targetPath, 0755, true);
+            $this->info("📁 Created directory: {$targetPath}");
+        }
+
+        $migrationFiles = glob($sourcePath . '/*.php');
+        
+        foreach ($migrationFiles as $sourceFile) {
+            $filename = basename($sourceFile);
+            $targetFile = $targetPath . '/' . $filename;
+            
+            // Check if file should be skipped
+            $shouldSkip = false;
+            foreach ($skipList as $skipPattern) {
+                if (str_contains($filename, $skipPattern)) {
+                    $shouldSkip = true;
+                    break;
+                }
+            }
+            
+            if ($shouldSkip) {
+                $this->line("  ⏭️  Skipped: {$filename}");
+                $results['migrations_skipped']++;
+                continue;
+            }
+            
+            // Only copy if file doesn't exist or source is newer
+            if (!file_exists($targetFile) || filemtime($sourceFile) > filemtime($targetFile)) {
+                copy($sourceFile, $targetFile);
+                $this->line("  ✅ Copied: {$filename}");
+                $results['migrations_copied']++;
+            } else {
+                $this->line("  📄 Up to date: {$filename}");
+            }
+        }
+    }
+
+    /**
+     * Sync seeders from shared to tenant directory
+     */
+    private function syncSeeders(string $sourcePath, string $targetPath, array $skipList, array &$results): void
+    {
+        if (!is_dir($sourcePath)) {
+            $this->warn("⚠️  Shared seeders directory not found: {$sourcePath}");
+            return;
+        }
+
+        // Create tenant seeders directory if it doesn't exist
+        if (!is_dir($targetPath)) {
+            mkdir($targetPath, 0755, true);
+            $this->info("📁 Created directory: {$targetPath}");
+        }
+
+        $seederFiles = glob($sourcePath . '/*.php');
+        
+        foreach ($seederFiles as $sourceFile) {
+            $filename = basename($sourceFile);
+            $targetFile = $targetPath . '/' . $filename;
+            
+            // Check if file should be skipped
+            $shouldSkip = false;
+            foreach ($skipList as $skipPattern) {
+                if (str_contains($filename, $skipPattern)) {
+                    $shouldSkip = true;
+                    break;
+                }
+            }
+            
+            if ($shouldSkip) {
+                $this->line("  ⏭️  Skipped: {$filename}");
+                $results['seeders_skipped']++;
+                continue;
+            }
+            
+            // Only copy if file doesn't exist or source is newer
+            if (!file_exists($targetFile) || filemtime($sourceFile) > filemtime($targetFile)) {
+                copy($sourceFile, $targetFile);
+                $this->line("  ✅ Copied: {$filename}");
+                $results['seeders_copied']++;
+            } else {
+                $this->line("  📄 Up to date: {$filename}");
+            }
+        }
     }
 
     /**
