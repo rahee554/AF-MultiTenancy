@@ -35,19 +35,42 @@
 ### Installation
 
 ```bash
+# Install the package (includes stancl/tenancy automatically)
 composer require artflow-studio/tenancy
+
+# Run the installation (sets up everything)
 php artisan af-tenancy:install
+
+# Test your setup
+php artisan af-tenancy:test-all
+
+# Create your first tenant
+php artisan tenant:manage create
 ```
 
-### Environment Setup
+### Basic Usage in Routes
 
-Add to your `.env` file:
+```php
+// routes/web.php
 
-```env
-# Database Configuration
-TENANT_DB_PREFIX=tenant_
-TENANT_DB_CONNECTION=mysql
-TENANT_DB_PERSISTENT=true
+// Central domain routes (your main app)
+Route::middleware(['central.web'])->group(function () {
+    Route::get('/', function () {
+        return view('welcome');
+    });
+});
+
+// Tenant routes (uses stancl/tenancy + our enhancements)
+Route::middleware(['tenant.web'])->group(function () {
+    Route::get('/', function () {
+        $tenant = tenant(); // stancl/tenancy helper
+        return "Welcome to {$tenant->name}!";
+    });
+    
+    // Your tenant-specific routes here
+    require base_path('routes/tenant.php');
+});
+```
 
 # Homepage Management
 TENANT_HOMEPAGE_ENABLED=true
