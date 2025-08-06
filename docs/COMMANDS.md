@@ -1,27 +1,41 @@
 # 🛠️ CLI Commands Reference
 
-**Artflow Studio Tenancy Package v0.4.6 - Complete Command Line Interface**
+**ArtFlow Studio Tenancy Package v2.0 - Complete Command Line Interface**
+
+Compatible with: Laravel 10+ & 11+, stancl/tenancy v3+, Livewire 3+
+
+## � Command Categories
+
+1. [Installation Commands](#installation-commands)
+2. [Tenant Management](#tenant-management)
+3. [Database Operations](#database-operations)
+4. [Testing & Validation](#testing--validation)
+5. [System Monitoring](#system-monitoring)
+6. [Development Tools](#development-tools)
 
 ---
 
 ## 📦 Installation Commands
 
-### Interactive Package Installation
+### Package Installation
 ```bash
 # Install the package with guided setup
-php artisan tenancy:install
+php artisan af-tenancy:install
 
 # Force reinstall (overwrite existing files)
-php artisan tenancy:install --force
+php artisan af-tenancy:install --force
+
+# Quick install for testing environments
+php artisan af-tenancy:quick-install
 ```
 
 ---
 
-## 🏢 Tenant Management Commands
+## 🏢 Tenant Management
 
 ### Main Tenant Management Command
 
-All tenant operations use the unified `tenant:manage` command:
+The unified command for all tenant operations:
 
 ```bash
 php artisan tenant:manage {action} [options]
@@ -31,23 +45,410 @@ php artisan tenant:manage {action} [options]
 
 #### **Create Tenant**
 ```bash
-# Interactive creation
+# Interactive creation with prompts
 php artisan tenant:manage create
 
-# With parameters
-php artisan tenant:manage create --name="Acme Corp" --domain="acme.local"
-
-# With custom database and status
+# Create with specific parameters
 php artisan tenant:manage create \
-  --name="Test Company" \
-  --domain="test.local" \
-  --database="custom_db" \
+  --name="Acme Corporation" \
+  --domain="acme.local" \
   --status="active" \
-  --notes="Test tenant"
+  --notes="New client onboarding"
 
-# Create and run migrations + seeders
+# Create with custom database name
 php artisan tenant:manage create \
-  --name="Demo Corp" \
+  --name="Custom Corp" \
+  --domain="custom.local" \
+  --database="tenant_custom_db"
+
+# Create and run migrations immediately
+php artisan tenant:manage create \
+  --name="Demo Company" \
+  --domain="demo.local" \
+  --migrate \
+  --seed
+
+# Create with fresh migrations (drops existing tables)
+php artisan tenant:manage create \
+  --name="Fresh Start" \
+  --domain="fresh.local" \
+  --migrate \
+  --fresh \
+  --seed
+```
+
+#### **List Tenants**
+```bash
+# List all tenants in table format
+php artisan tenant:manage list
+
+# Output includes:
+# ID | UUID | Name | Domain | Database | Status | Created At
+```
+
+#### **Tenant Status Management**
+```bash
+# Activate a suspended tenant
+php artisan tenant:manage activate --tenant=550e8400-e29b-41d4
+
+# Deactivate an active tenant
+php artisan tenant:manage deactivate --tenant=550e8400-e29b-41d4
+
+# Check detailed tenant status
+php artisan tenant:manage status --tenant=550e8400-e29b-41d4
+
+# Bulk activate all inactive tenants
+php artisan tenant:manage activate --all
+```
+
+#### **Homepage Management**
+```bash
+# Enable homepage for specific tenant
+php artisan tenant:manage enable-homepage --tenant=550e8400-e29b-41d4
+
+# Disable homepage for specific tenant
+php artisan tenant:manage disable-homepage --tenant=550e8400-e29b-41d4
+
+# Interactive homepage management (prompts for tenant)
+php artisan tenant:manage enable-homepage
+php artisan tenant:manage disable-homepage
+```
+
+#### **Delete Tenant**
+```bash
+# Delete with confirmation prompt
+php artisan tenant:manage delete --tenant=550e8400-e29b-41d4
+
+# Force delete without confirmation
+php artisan tenant:manage delete --tenant=550e8400-e29b-41d4 --force
+
+# Delete tenant and all associated data
+php artisan tenant:manage delete --tenant=550e8400-e29b-41d4 --purge
+```
+
+---
+
+## 🗄️ Database Operations
+
+### Migration Management
+```bash
+# Migrate specific tenant database
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4
+
+# Migrate all tenants
+php artisan tenant:manage migrate-all
+
+# Fresh migration (drops all tables first)
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --fresh
+
+# Migrate with seeders
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --seed
+
+# Rollback tenant migrations
+php artisan tenant:manage migrate --tenant=550e8400-e29b-41d4 --rollback
+```
+
+### Seeding Operations
+```bash
+# Seed specific tenant database
+php artisan tenant:manage seed --tenant=550e8400-e29b-41d4
+
+# Seed all tenant databases
+php artisan tenant:manage seed-all
+
+# Seed with specific seeder class
+php artisan tenant:manage seed --tenant=550e8400-e29b-41d4 --class=UserSeeder
+```
+
+### Database Utilities
+```bash
+# Diagnose database issues
+php artisan tenancy:diagnose-database
+
+# Fix tenant database connections
+php artisan tenancy:fix-tenant-databases
+
+# Warm up database connections
+php artisan tenancy:warmup-cache
+```
+
+---
+
+## 🧪 Testing & Validation
+
+### System Testing
+```bash
+# Comprehensive system test
+php artisan tenancy:test-system
+
+# Quick system validation
+php artisan tenancy:validate
+
+# Test tenant connections
+php artisan tenancy:test-connections
+
+# Test middleware functionality
+php artisan tenancy:test-middleware
+```
+
+### Performance Testing
+```bash
+# Standard performance test
+php artisan tenancy:test-performance
+
+# Enhanced performance test with metrics
+php artisan tenancy:test-performance-enhanced
+
+# Performance test with specific parameters
+php artisan tenancy:test-performance \
+  --concurrent=10 \
+  --duration=60 \
+  --tenants=5
+
+# Skip deep tests for faster execution
+php artisan tenancy:test-performance-enhanced --skip-deep-tests
+```
+
+### Isolation Testing
+```bash
+# Test data isolation between tenants
+php artisan tenancy:test-isolation
+
+# Test with specific parameters
+php artisan tenancy:test-isolation \
+  --tenants=3 \
+  --operations=10
+
+# Comprehensive isolation test
+php artisan tenancy:test-isolation --comprehensive
+```
+
+### Stress Testing
+```bash
+# High-intensity load testing
+php artisan tenancy:stress-test
+
+# Stress test with custom parameters
+php artisan tenancy:stress-test \
+  --users=50 \
+  --duration=300 \
+  --tenants=10
+
+# Memory stress test
+php artisan tenancy:stress-test --memory-intensive
+```
+
+### Comprehensive Testing
+```bash
+# Run all available tests
+php artisan tenancy:comprehensive-test
+
+# Quick comprehensive test
+php artisan tenancy:comprehensive-test --quick
+
+# Generate detailed test report
+php artisan tenancy:comprehensive-test --report --output=reports/
+```
+
+---
+
+## 📊 System Monitoring
+
+### Health Checks
+```bash
+# Basic system health check
+php artisan tenancy:health
+
+# Detailed health check with metrics
+php artisan tenancy:health --detailed
+
+# Health check with email alerts
+php artisan tenancy:health --alert-email=admin@example.com
+```
+
+### Real-time Monitoring
+```bash
+# Live system monitoring
+php artisan tenancy:monitor --live
+
+# Monitor specific metrics
+php artisan tenancy:monitor --metric=memory,cpu,connections
+
+# Monitor with refresh interval
+php artisan tenancy:monitor --live --interval=5
+```
+
+### Statistics & Reports
+```bash
+# System statistics overview
+php artisan tenancy:stats
+
+# Detailed system report
+php artisan tenancy:report
+
+# Generate JSON report
+php artisan tenancy:report --format=json --output=reports/system-report.json
+
+# Performance metrics report
+php artisan tenancy:report --performance --interval=24h
+```
+
+---
+
+## 🛠️ Development Tools
+
+### Debug & Diagnostics
+```bash
+# Debug tenant connection
+php artisan tenancy:debug-tenant-connection --tenant=550e8400-e29b-41d4
+
+# Check route configuration
+php artisan tenancy:check-route-config
+
+# Validate entire tenancy system
+php artisan tenancy:validate-system
+```
+
+### Test Data Generation
+```bash
+# Create test tenants for development
+php artisan tenancy:create-test-tenants
+
+# Create specific number of test tenants
+php artisan tenancy:create-test-tenants --count=5
+
+# Create test tenants with sample data
+php artisan tenancy:create-test-tenants --count=3 --with-data
+```
+
+### Cache Management
+```bash
+# Warm up tenant caches
+php artisan tenancy:warmup-cache
+
+# Clear all tenant caches
+php artisan tenancy:clear-cache
+
+# Clear cache for specific tenant
+php artisan tenancy:clear-cache --tenant=550e8400-e29b-41d4
+```
+
+---
+
+## 📝 Command Options Reference
+
+### Global Options
+- `--tenant=UUID` - Target specific tenant by UUID
+- `--force` - Skip confirmation prompts
+- `--quiet` - Suppress output messages
+- `--verbose` - Show detailed output
+- `--no-interaction` - Run non-interactively
+
+### Tenant Creation Options
+- `--name=NAME` - Set tenant name
+- `--domain=DOMAIN` - Set primary domain
+- `--database=NAME` - Custom database name
+- `--status=STATUS` - Set status (active, suspended, blocked, inactive)
+- `--notes=TEXT` - Add tenant notes
+- `--migrate` - Run migrations after creation
+- `--seed` - Run seeders after migration
+- `--fresh` - Drop existing tables before migration
+
+### Migration Options
+- `--fresh` - Drop all tables before migrating
+- `--seed` - Run seeders after migration
+- `--rollback` - Rollback migrations
+- `--step=N` - Number of migration batches to rollback
+
+### Testing Options
+- `--concurrent=N` - Number of concurrent users (default: 10)
+- `--duration=SECONDS` - Test duration (default: 60)
+- `--tenants=N` - Number of test tenants (default: 3)
+- `--skip-deep-tests` - Skip resource-intensive tests
+- `--report` - Generate detailed report
+- `--output=PATH` - Specify output directory
+
+### Monitoring Options
+- `--live` - Enable live monitoring
+- `--interval=SECONDS` - Refresh interval for live monitoring
+- `--metric=METRICS` - Specific metrics to monitor (comma-separated)
+- `--alert-email=EMAIL` - Email for health check alerts
+
+---
+
+## 💡 Usage Examples
+
+### Complete Tenant Setup
+```bash
+# Create production tenant with all features
+php artisan tenant:manage create \
+  --name="ACME Corporation" \
+  --domain="acme.example.com" \
+  --status="active" \
+  --notes="Production client - Premium plan" \
+  --migrate \
+  --seed
+```
+
+### Development Workflow
+```bash
+# Create test environment
+php artisan tenancy:create-test-tenants --count=3 --with-data
+
+# Run comprehensive tests
+php artisan tenancy:comprehensive-test --quick
+
+# Monitor system performance
+php artisan tenancy:monitor --live --interval=10
+```
+
+### Production Maintenance
+```bash
+# Daily health check
+php artisan tenancy:health --detailed --alert-email=ops@example.com
+
+# Performance monitoring
+php artisan tenancy:test-performance-enhanced --concurrent=20
+
+# System diagnostics
+php artisan tenancy:validate-system
+```
+
+### Troubleshooting
+```bash
+# Diagnose connection issues
+php artisan tenancy:debug-tenant-connection --tenant=TENANT_UUID
+
+# Fix database problems
+php artisan tenancy:fix-tenant-databases
+
+# Clear all caches
+php artisan tenancy:clear-cache
+```
+
+---
+
+## 🚨 Important Notes
+
+### Command Execution Order
+1. Always run system validation before major operations
+2. Use `--force` flag carefully in production
+3. Test migrations on staging before production
+4. Monitor system health after bulk operations
+
+### Production Considerations
+- Run tests during maintenance windows
+- Use `--quiet` flag in automated scripts
+- Always backup before destructive operations
+- Monitor resource usage during stress tests
+
+### Development Tips
+- Use test tenants for development (`tenancy:create-test-tenants`)
+- Enable verbose output for debugging (`--verbose`)
+- Generate reports for performance analysis
+- Use live monitoring during development
+
+This comprehensive CLI interface provides everything needed for efficient multi-tenant application management with proper monitoring, testing, and maintenance capabilities. \
   --domain="demo.local" \
   --seed --fresh
 ```

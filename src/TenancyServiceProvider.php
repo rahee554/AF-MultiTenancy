@@ -17,7 +17,7 @@ use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
 use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
 use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
 use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
-use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
+//use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -51,7 +51,6 @@ class TenancyServiceProvider extends ServiceProvider
                 TestPerformanceCommand::class,
                 ComprehensiveTenancyTestCommand::class,
                 \ArtflowStudio\Tenancy\Commands\ComprehensiveTestCommand::class,
-                QuickInstallTestCommand::class,
             ]);
         }
 

@@ -1,53 +1,90 @@
-# 🏗️ AF-MultiTenancy Package Architecture
+# 🏗️ ArtFlow Studio Tenancy Package Architecture
 
-**Version: 0.6.5** - Complete Technical Architecture and Developer Guide
+**Version: 2.0** - Complete Technical Architecture and Developer Guide  
+**Compatible with**: Laravel 10+ & 11+, stancl/tenancy v3+, Livewire 3+
 
 ## 📋 Table of Contents
 
 1. [Overview](#overview)
-2. [Architecture Status](#architecture-status)
-3. [Core Architecture](#core-architecture)
-4. [Package Structure](#package-structure)
-5. [Component Details](#component-details)
-6. [Database Design](#database-design)
-7. [Middleware Stack](#middleware-stack)
-8. [Service Layer](#service-layer)
-9. [Event System](#event-system)
+2. [Core Architecture](#core-architecture)
+3. [Package Structure](#package-structure)
+4. [Component Details](#component-details)
+5. [Database Design](#database-design)
+6. [Middleware Stack](#middleware-stack)
+7. [Service Layer](#service-layer)
+8. [Livewire Integration](#livewire-integration)
+9. [Command System](#command-system)
 10. [Extension Points](#extension-points)
 11. [Development Guidelines](#development-guidelines)
 
 ## 🎯 Overview
 
-AF-MultiTenancy is built as a Laravel package that extends `stancl/tenancy` with additional enterprise features. The architecture follows Laravel best practices and provides multiple extension points for customization.
+ArtFlow Studio Tenancy is an **enterprise-grade Laravel package** that extends `stancl/tenancy` with enhanced multi-tenancy features including:
+
+- ✅ **Complete Livewire 3 Integration** with session scoping
+- ✅ **Status Management** (active, suspended, blocked, inactive)
+- ✅ **Enhanced Middleware Stack** with proper session isolation
+- ✅ **Comprehensive CLI Tools** (20+ Artisan commands)
+- ✅ **Real-time Monitoring** and analytics
+- ✅ **Performance Optimizations** and caching
+- ✅ **API Management** with authentication
 
 ### **Design Principles**
-- **Separation of Concerns** - Clear separation between tenant resolution, management, and data handling
+- **Built ON stancl/tenancy** - Extends, never replaces core functionality
+- **Session Isolation** - Proper Livewire support with ScopeSessions middleware
 - **Event-Driven** - Uses Laravel events for lifecycle management
-- **Middleware-Based** - Request handling through Laravel middleware stack
+- **Middleware-Based** - Request handling through enhanced middleware stack
 - **Service-Oriented** - Business logic encapsulated in service classes
-- **Configuration-Driven** - Behavior controlled through configuration files
+- **Zero-Config** - Works out of the box with sensible defaults
 
 ---
 
-## 🏗️ **Architecture Status - PRODUCTION READY**
+## 🏗️ Core Architecture
 
-### **✅ Correct Implementation Confirmed**
-Our package is **properly built on top of stancl/tenancy** and does NOT have architecture issues. Here's what we're doing right:
+### **Foundation Layer - stancl/tenancy**
+```
+┌─────────────────────────────────────────────┐
+│              APPLICATION REQUEST            │
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│           STANCL/TENANCY CORE               │
+│  ┌─────────────┐  ┌─────────────────────────┤
+│  │ Domain      │  │ Database                │
+│  │ Resolution  │  │ Switching               │
+│  └─────────────┘  └─────────────────────────┤
+│  ┌─────────────┐  ┌─────────────────────────┤
+│  │ Tenant      │  │ Migration               │
+│  │ Bootstrap   │  │ Management              │
+│  └─────────────┘  └─────────────────────────┤
+└─────────────────────────────────────────────┘
+                     │
+┌─────────────────────────────────────────────┐
+│         ARTFLOW STUDIO ENHANCEMENTS         │
+│  ┌─────────────┐  ┌─────────────────────────┤
+│  │ Status      │  │ Session                 │
+│  │ Management  │  │ Scoping                 │
+│  └─────────────┘  └─────────────────────────┤
+│  ┌─────────────┐  ┌─────────────────────────┤
+│  │ Livewire    │  │ Performance             │
+│  │ Integration │  │ Monitoring              │
+│  └─────────────┘  └─────────────────────────┤
+└─────────────────────────────────────────────┘
+```
 
-- ✅ **Proper stancl/tenancy Integration** - We register their service provider first and extend their classes
-- ✅ **Enhanced, Not Replaced** - We extend `MySQLDatabaseManager` and use their middleware stack
-- ✅ **Connection Management** - stancl/tenancy handles all connection management properly
-- ✅ **Performance Optimized** - Using stancl's proven bootstrapping system
-- ✅ **Event-Driven** - Leveraging stancl's complete event system
+### **Middleware Stack Integration**
+Our package integrates seamlessly with stancl/tenancy's middleware:
 
-### **📊 Actual Performance Metrics**
-- ✅ **Tenant Switching** - < 50ms using stancl's optimized system
-- ✅ **Connection Persistence** - Handled by stancl/tenancy's battle-tested approach
-- ✅ **Memory Efficiency** - Optimized through proper Laravel integration
-- ✅ **Concurrent Tenants** - Supports 100+ tenants efficiently
-- ✅ **Database Isolation** - 100% isolation via separate tenant databases
-
-### **🔧 Our Enhancement Approach**
+```php
+// Middleware Group: tenant.web (Critical Order)
+[
+    'web',                        // Laravel web middleware (sessions, CSRF)
+    'tenant',                     // stancl/tenancy: InitializeTenancyByDomain
+    'tenant.prevent-central',     // stancl/tenancy: PreventAccessFromCentralDomains  
+    'tenant.scope-sessions',      // stancl/tenancy: ScopeSessions (CRITICAL for Livewire)
+    'af-tenant',                 // Our enhancements: status checks, logging
+]
+```
 ```
 stancl/tenancy (Core) → AF-MultiTenancy (Enhancements) → Your Application
        ↓                         ↓                              ↓
@@ -101,15 +138,80 @@ stancl/tenancy (Core) → AF-MultiTenancy (Enhancements) → Your Application
 └─────────────────────────────────────────────────────────────┘
 ```
 
+---
+
 ## 📁 Package Structure
 
 ```
-src/
-├── Commands/                    # Artisan commands
-│   ├── InstallTenancyCommand.php      # af-tenancy:install
-│   ├── TenantCommand.php              # tenant:manage
-│   ├── HealthCheckCommand.php         # System health checks
-│   └── ...
+artflow-studio/tenancy/
+├── 📂 config/
+│   ├── artflow-tenancy.php      # Our package configuration
+│   └── tenancy.php              # Enhanced stancl/tenancy config
+├── 📂 database/
+│   └── migrations/              # Package migrations
+├── 📂 docs/                     # Complete documentation
+│   ├── ARCHITECTURE.md          # This file
+│   ├── API.md                   # API reference
+│   ├── COMMANDS.md              # CLI commands
+│   ├── FEATURES.md              # Feature overview
+│   └── INSTALLATION.md          # Setup guide
+├── 📂 resources/
+│   └── views/                   # Admin interface views
+├── 📂 routes/
+│   └── af-tenancy.php          # Package routes
+├── 📂 src/
+│   ├── 📂 Commands/            # 20+ CLI commands
+│   ├── 📂 Http/
+│   │   ├── Controllers/        # API & web controllers
+│   │   └── Middleware/         # Enhanced middleware
+│   ├── 📂 Models/              # Enhanced models
+│   ├── 📂 Providers/           # Service providers
+│   ├── 📂 Services/            # Business logic
+│   └── TenancyServiceProvider.php
+├── 📂 stubs/                   # Template files
+└── 📂 tests/                   # Test suites
+```
+
+---
+
+## 🧩 Component Details
+
+### **1. Service Provider (TenancyServiceProvider.php)**
+
+The main service provider that bootstraps the entire package:
+
+```php
+class TenancyServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        // Load package resources
+        $this->loadRoutesFrom(__DIR__ . '/../routes/af-tenancy.php');
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'af-tenancy');
+        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
+        
+        // Register middleware and commands
+        $this->registerMiddleware();
+        $this->configureLivewire();
+    }
+
+    public function register(): void
+    {
+        // Register stancl/tenancy first
+        $this->app->register(\Stancl\Tenancy\TenancyServiceProvider::class);
+        
+        // Register our services
+        $this->app->singleton(TenantService::class);
+        $this->app->singleton(TenantContextCache::class);
+    }
+}
+```
+
+**Key Features:**
+- ✅ Auto-registers stancl/tenancy service provider
+- ✅ Configures Livewire for multi-tenancy
+- ✅ Sets up middleware groups with proper ordering
+- ✅ Registers 20+ Artisan commands
 ├── Http/
 │   ├── Controllers/            # Web and API controllers
 │   │   ├── TenantApiController.php

@@ -1,23 +1,43 @@
 {
     "name": "artflow-studio/tenancy",
-    "description": "Enhanced Laravel multi-tenancy package built on top of stancl/tenancy with status management, homepage functionality, and Livewire compatibility.",
+    "description": "Enterprise-grade Laravel multi-tenancy package built on stancl/tenancy with Livewire 3 integration, enhanced CLI tools, and comprehensive monitoring.",
     "type": "library",
     "license": "MIT",
+    "keywords": [
+        "laravel",
+        "multi-tenancy",
+        "tenancy",
+        "saas",
+        "stancl",
+        "livewire",
+        "database",
+        "isolation",
+        "enterprise"
+    ],
     "authors": [
         {
             "name": "Artflow Studio",
-            "email": "info@artflow-studio.com"
+            "email": "info@artflow-studio.com",
+            "homepage": "https://artflow-studio.com"
         }
     ],
+    "homepage": "https://github.com/artflow-studio/tenancy",
+    "support": {
+        "issues": "https://github.com/artflow-studio/tenancy/issues",
+        "source": "https://github.com/artflow-studio/tenancy",
+        "docs": "https://github.com/artflow-studio/tenancy/tree/main/docs"
+    },
     "minimum-stability": "stable",
+    "prefer-stable": true,
     "require": {
-        "php": "^8.1",
-        "illuminate/support": "*",
-        "stancl/tenancy": "*",
-        "livewire/livewire": "*"
+        "php": ">=8.0",
+        "laravel/framework": ">=10.0",
+        "stancl/tenancy": ">=3.9.1"
     },
     "require-dev": {
-        "phpunit/phpunit": "^10.0"
+        "phpunit/phpunit": "^10.0|^11.0",
+        "orchestra/testbench": "^8.0|^9.0",
+        "phpstan/phpstan": "^1.10"
     },
     "autoload": {
         "psr-4": {
@@ -34,9 +54,23 @@
             "providers": [
                 "ArtflowStudio\\Tenancy\\TenancyServiceProvider"
             ]
+        },
+        "branch-alias": {
+            "dev-main": "2.0-dev"
         }
     },
     "config": {
-        "sort-packages": true
+        "sort-packages": true,
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "allow-plugins": {
+            "composer/package-versions-deprecated": true
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "test-coverage": "vendor/bin/phpunit --coverage-html coverage",
+        "analyse": "vendor/bin/phpstan analyse",
+        "format": "vendor/bin/php-cs-fixer fix"
     }
 }

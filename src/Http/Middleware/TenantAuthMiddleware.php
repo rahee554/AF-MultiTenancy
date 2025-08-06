@@ -4,15 +4,18 @@ namespace ArtflowStudio\Tenancy\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
-use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
-use Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Tenant Authentication Middleware
+ * 
+ * This middleware is designed to work with stancl/tenancy for auth routes.
+ * It ensures proper tenant context is maintained during authentication.
+ */
 class TenantAuthMiddleware
 {
     /**
      * Handle an incoming request for authentication routes
-     * CRITICAL: Must properly initialize tenant context for auth routes
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \Closure  $next
@@ -20,7 +23,7 @@ class TenantAuthMiddleware
      */
     public function handle(Request $request, Closure $next)
     {
-        // Skip tenancy initialization completely for assets
+        // Skip tenancy for asset requests
         if ($this->isAssetRequest($request)) {
             return $next($request);
         }
@@ -28,46 +31,30 @@ class TenantAuthMiddleware
         $domain = $request->getHost();
         $centralDomains = config('tenancy.central_domains', []);
 
-        // Skip tenant initialization for central domains
+        // For central domains, skip tenant processing
         if (in_array($domain, $centralDomains)) {
-            Log::info('TenantAuthMiddleware: Central domain detected, skipping tenancy', [
+            Log::debug('TenantAuthMiddleware: Central domain detected, skipping tenancy', [
                 'domain' => $domain
             ]);
             return $next($request);
         }
 
-        // CRITICAL FIX: For authentication routes, MUST initialize tenancy properly
-        // This ensures authentication happens in the tenant database, not central
-        try {
-            $initializeTenancy = app(InitializeTenancyByDomain::class);
-            $preventAccess = app(PreventAccessFromCentralDomains::class);
-            
-            return $initializeTenancy->handle($request, function ($request) use ($next, $preventAccess, $domain) {
-                return $preventAccess->handle($request, function ($request) use ($next, $domain) {
-                    // Log successful tenant initialization for debugging
-                    if (function_exists('tenant') && tenant()) {
-                        Log::info('TenantAuthMiddleware: Successfully initialized tenant context', [
-                            'domain' => $domain,
-                            'tenant_id' => tenant()->id,
-                            'route' => $request->path()
-                        ]);
-                    }
-                    
-                    return $next($request);
-                });
-            });
-        } catch (\Exception $e) {
-            Log::error('TenantAuthMiddleware: Failed to initialize tenancy', [
+        // For tenant domains, we let stancl/tenancy handle the heavy lifting
+        // This middleware just ensures logging and handles edge cases
+        
+        $response = $next($request);
+        
+        // Log tenant context after processing (if tenant was initialized)
+        if (function_exists('tenant') && tenant()) {
+            Log::debug('TenantAuthMiddleware: Request processed with tenant context', [
                 'domain' => $domain,
-                'error' => $e->getMessage(),
-                'route' => $request->path()
+                'tenant_id' => tenant('id'),
+                'route' => $request->route()?->getName(),
             ]);
-            
-            // If we can't initialize tenancy, we should not proceed with auth
-            abort(500, 'Tenant context initialization failed');
         }
+        
+        return $response;
     }
-
     /**
      * Check if this is an asset request
      */

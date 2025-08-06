@@ -1,32 +1,49 @@
 # 🔌 REST API Reference
 
-**Artflow Studio Tenancy Package v0.4.6 - Complete API Documentation**
+**ArtFlow Studio Tenancy Package v2.0 - Complete API Documentation**
+
+Compatible with: Laravel 10+ & 11+, stancl/tenancy v3+, Livewire 3+
 
 ---
 
 ## 🔐 Authentication
 
-### API Key Authentication
-Add the API key to your request headers:
+### API Key Authentication (Required)
+
+All API endpoints require authentication via the `X-API-Key` header:
 
 ```bash
-# Using curl
-curl -H "X-API-Key: your_tenant_api_key" \
-     -H "Content-Type: application/json" \
-     https://your-app.com/tenancy/tenants
+# Using curl with API key
+curl -X GET "https://your-app.com/tenancy/tenants" \
+  -H "X-API-Key: sk_tenant_live_your_secure_api_key_here" \
+  -H "Content-Type: application/json"
 
 # Using Bearer Token (alternative)
-curl -H "Authorization: Bearer your_bearer_token" \
-     -H "Content-Type: application/json" \
-     https://your-app.com/tenancy/tenants
+curl -X GET "https://your-app.com/tenancy/tenants" \
+  -H "Authorization: Bearer your_bearer_token" \
+  -H "Content-Type: application/json"
 ```
 
 ### Environment Configuration
 ```env
-# In your .env file
+# Required: Set your API key
 TENANT_API_KEY=sk_tenant_live_your_secure_api_key_here
+
+# Optional: Bearer token support
 TENANT_BEARER_TOKEN=your_bearer_token_here
+
+# Security settings
+API_RATE_LIMIT_ENABLED=true
+API_RATE_LIMIT_ATTEMPTS=60
+API_RATE_LIMIT_DECAY=1
 ```
+
+### Security Features
+- ✅ **Middleware-enforced authentication** - All routes protected
+- ✅ **Rate limiting** - Built-in throttling via `throttle:api`
+- ✅ **Development mode** - Localhost bypass for testing
+- ✅ **Production enforcement** - API key always required in production
+- ✅ **Standardized errors** - Consistent 401/403 responses
 
 ---
 
@@ -37,17 +54,67 @@ TENANT_BEARER_TOKEN=your_bearer_token_here
 https://your-app.com/tenancy/
 ```
 
-### Get All Tenants
+### Authentication Headers (Required for all endpoints)
+```http
+X-API-Key: sk_tenant_live_your_secure_api_key_here
+Content-Type: application/json
+```
+
+---
+
+## 📋 Tenant Endpoints
+
+### List All Tenants
 ```http
 GET /tenancy/tenants
 ```
 
 **Query Parameters:**
-- `page` - Page number (default: 1)
-- `per_page` - Results per page (default: 15, max: 100)
-- `status` - Filter by status: `active`, `inactive`, `blocked`
-- `search` - Search by name or domain
-- `sort` - Sort by field: `name`, `created_at`, `status`
+- `page` (integer) - Page number (default: 1)
+- `per_page` (integer) - Results per page (default: 15, max: 100)
+- `search` (string) - Search by tenant name or domain
+- `status` (string) - Filter by status: `active`, `suspended`, `blocked`, `inactive`
+- `sort` (string) - Sort by field: `name`, `created_at`, `status`, `database_name`
+- `order` (string) - Sort order: `asc`, `desc` (default: `asc`)
+
+**Example Request:**
+```bash
+curl -X GET "https://your-app.com/tenancy/tenants?page=1&per_page=20&status=active&sort=created_at&order=desc" \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "data": [
+      {
+        "id": 1,
+        "uuid": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "ACME Corporation",
+        "database_name": "tenant_550e8400_db123",
+        "status": "active",
+        "created_at": "2024-08-01T10:00:00.000000Z",
+        "updated_at": "2024-08-01T10:00:00.000000Z",
+        "domains": [
+          {
+            "id": 1,
+            "domain": "acme.example.com",
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+            "created_at": "2024-08-01T10:00:00.000000Z"
+          }
+        ]
+      }
+    ],
+    "current_page": 1,
+    "per_page": 15,
+    "total": 1,
+    "last_page": 1
+  },
+  "timestamp": "2024-08-01T15:30:00Z"
+}
 - `order` - Sort order: `asc`, `desc`
 
 **Example Request:**
