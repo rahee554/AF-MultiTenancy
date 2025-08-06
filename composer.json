@@ -3,7 +3,6 @@
     "description": "Enhanced Laravel multi-tenancy package built on top of stancl/tenancy with status management, homepage functionality, and Livewire compatibility.",
     "type": "library",
     "license": "MIT",
-    "version": "0.7.0.9",
     "authors": [
         {
             "name": "Artflow Studio",
