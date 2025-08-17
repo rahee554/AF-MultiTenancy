@@ -1,6 +1,8 @@
-# Quick Middleware Reference
+# 🛡️ Middleware Reference Guide
 
-## TL;DR - What Middleware Should I Use?
+**Complete middleware guide for ArtFlow Studio Tenancy Package**
+
+## Quick Reference
 
 ### ✅ For Central Domain Routes (localhost, admin.yoursite.com)
 ```php
@@ -27,27 +29,34 @@ Route::middleware(['tenant.api'])->group(function () {
 });
 ```
 
-## ❌ What NOT to Use
+## Understanding Central vs Tenant Domains
 
-### DON'T use these middleware groups:
-- `tenant.auth.web` - Only for special auth logging scenarios
-- `central` - Low-level middleware, use `central.web` instead
-- `af-tenant` - Low-level middleware, included in `tenant.web`
+**This is BY DESIGN in stancl/tenancy!** 
+
+- **Central domains** (like `localhost`, `admin.yoursite.com`) are for admin/management
+- **Tenant domains** (like `tenant1.yoursite.com`, `tenant2.yoursite.com`) are for tenant applications
+- **They should NOT share the same login page** - they serve different purposes
+
+## Available Middleware Groups
+
+| Middleware Group | Purpose | Available On | Session Scoping |
+|------------------|---------|--------------|-----------------|
+| `central.web` | Central domain web routes | Central only | Standard Laravel |
+| `tenant.web` | Tenant domain web routes | Tenant only | Per-tenant scoped |
+| `tenant.api` | Tenant domain API routes | Tenant only | No sessions |
+
+## ❌ Common Mistakes
 
 ### DON'T mix middleware:
 ```php
 // ❌ WRONG - Don't mix central and tenant
 Route::middleware(['central.web', 'tenant.web']) 
 
-// ❌ WRONG - Don't use on same route group
+// ❌ WRONG - Don't use on same route group  
 Route::middleware(['central.web'])->group(function () {
     Route::middleware(['tenant.web'])->get('/mixed'); // This breaks everything
 });
 ```
-
-## Authentication Patterns
-
-### Pattern 1: Separate Login Pages (Recommended)
 
 **Central Login** (for admins):
 ```php

@@ -6,6 +6,9 @@ Compatible with: Laravel 10+ & 11+, stancl/tenancy v3+, Livewire 3+
 
 ## 📋 Command Categories
 
+> Note: Command classes are organized under `src/Commands` in three subfolders: `Database`, `Tenancy`, and `Testing`.
+> The package `TenancyServiceProvider` now performs recursive discovery and auto-registers Artisan commands from `src/Commands` (this replaced the older `src/Console/Commands` layout).
+
 1. [Installation Commands](#installation-commands)
 2. [Tenant Management](#tenant-management)  
 3. [**NEW: Database Operations**](#database-operations) 🆕

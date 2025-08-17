@@ -342,89 +342,202 @@ class TenantService
     {
         $health = [
             'status' => 'healthy',
-            'checks' => [
-                'database' => ['status' => 'healthy', 'message' => 'Database connection successful'],
-                'tenant_databases' => ['status' => 'healthy', 'message' => 'All tenant databases accessible'],
-            ]
+            'checks' => []
         ];
 
+        // Check main database connection
         try {
-            // Test main database connection
             DB::connection()->getPdo();
+            $health['checks']['database'] = [
+                'status' => 'ok', 
+                'message' => 'Database connection successful'
+            ];
         } catch (\Exception $e) {
             $health['status'] = 'unhealthy';
-            $health['checks']['database'] = ['status' => 'error', 'message' => $e->getMessage()];
+            $health['checks']['database'] = [
+                'status' => 'error', 
+                'message' => 'Database connection failed: ' . $e->getMessage()
+            ];
         }
 
-        // Check tenant databases with detailed issues
-        $tenants = Tenant::active()->get();
-        $failedDatabases = 0;
-        $issues = [];
+        // Check tenant databases
+        try {
+            $tenants = Tenant::where('status', 'active')->get();
+            $accessibleCount = 0;
+            $totalCount = $tenants->count();
+            $issues = [];
 
-        foreach ($tenants as $tenant) {
-            $databaseName = $tenant->getDatabaseName();
-            
-            if (!$this->checkTenantDatabase($databaseName)) {
-                $failedDatabases++;
-                $issues[] = [
-                    'tenant_uuid' => $tenant->uuid,
-                    'tenant' => $tenant->name,
-                    'database' => $databaseName,
-                    'error' => 'Database does not exist or is not accessible',
-                    'fixable' => true
-                ];
-            } else {
-                // Check if database has tables (migrations ran)
+            foreach ($tenants as $tenant) {
                 try {
-                    // Find the tenant and use proper stancl/tenancy context
-                    $tenant = Tenant::where('database', $databaseName)->first();
-                    if (!$tenant) {
-                        $tenant = Tenant::where('id', str_replace('tenant_', '', $databaseName))->first();
-                    }
+                    $databaseName = $tenant->getDatabaseName();
                     
-                    if ($tenant) {
-                        $tenant->run(function () use (&$tableCount) {
-                            $tableCount = count(DB::select('SHOW TABLES'));
-                        });
-                    } else {
-                        $tableCount = 0;
-                    }
-                    
-                    if ($tableCount === 0) {
-                        $failedDatabases++;
+                    // Check if database exists
+                    if (!$this->checkTenantDatabase($databaseName)) {
                         $issues[] = [
-                            'tenant_uuid' => $tenant->uuid,
                             'tenant' => $tenant->name,
                             'database' => $databaseName,
-                            'error' => 'Database exists but no tables found (migrations not run)',
-                            'fixable' => true
+                            'error' => 'Database does not exist'
                         ];
+                        continue;
+                    }
+
+                    // Test connection by running in tenant context
+                    $tableCount = 0;
+                    $tenant->run(function () use (&$tableCount) {
+                        $tableCount = count(DB::select('SHOW TABLES'));
+                    });
+
+                    if ($tableCount === 0) {
+                        $issues[] = [
+                            'tenant' => $tenant->name,
+                            'database' => $databaseName,
+                            'error' => 'Database exists but no tables (migrations not run)'
+                        ];
+                    } else {
+                        $accessibleCount++;
                     }
                 } catch (\Exception $e) {
-                    $failedDatabases++;
                     $issues[] = [
-                        'tenant_uuid' => $tenant->uuid,
                         'tenant' => $tenant->name,
-                        'database' => $databaseName,
-                        'error' => 'Database connection error: ' . $e->getMessage(),
-                        'fixable' => false
+                        'database' => $tenant->getDatabaseName(),
+                        'error' => 'Connection error: ' . $e->getMessage()
                     ];
                 }
             }
+
+            if ($accessibleCount === $totalCount && $totalCount > 0) {
+                $health['checks']['tenant_databases'] = [
+                    'status' => 'ok',
+                    'message' => "All {$totalCount} tenant databases accessible"
+                ];
+            } elseif ($totalCount === 0) {
+                $health['checks']['tenant_databases'] = [
+                    'status' => 'ok',
+                    'message' => "No active tenants to check"
+                ];
+            } else {
+                $status = $accessibleCount > 0 ? 'warning' : 'error';
+                $health['checks']['tenant_databases'] = [
+                    'status' => $status,
+                    'message' => "{$accessibleCount}/{$totalCount} tenant databases accessible",
+                    'issues' => $issues
+                ];
+                
+                if ($accessibleCount === 0) {
+                    $health['status'] = 'unhealthy';
+                } elseif ($health['status'] === 'healthy') {
+                    $health['status'] = 'warning';
+                }
+            }
+        } catch (\Exception $e) {
+            $health['status'] = 'unhealthy';
+            $health['checks']['tenant_databases'] = [
+                'status' => 'error',
+                'message' => 'Failed to check tenant databases: ' . $e->getMessage()
+            ];
         }
 
-        if ($failedDatabases > 0) {
-            $health['status'] = 'warning';
-            $health['checks']['tenant_databases'] = [
-                'status' => 'warning',
-                'message' => "{$failedDatabases} tenant databases have issues",
-                'issues' => $issues,
-                'healthy_count' => count($tenants) - $failedDatabases,
-                'total_count' => count($tenants)
+        // Check cache system
+        try {
+            $cacheKey = 'health_check_' . time();
+            $testValue = 'health_test_' . \Illuminate\Support\Str::random(10);
+            
+            cache()->put($cacheKey, $testValue, 60);
+            $retrieved = cache()->get($cacheKey);
+            
+            if ($retrieved === $testValue) {
+                $health['checks']['cache'] = [
+                    'status' => 'ok',
+                    'message' => 'Cache system operational (' . config('cache.default') . ')'
+                ];
+            } else {
+                $health['checks']['cache'] = [
+                    'status' => 'warning',
+                    'message' => 'Cache not working properly (stored: ' . $testValue . ', retrieved: ' . $retrieved . ')'
+                ];
+                if ($health['status'] === 'healthy') {
+                    $health['status'] = 'warning';
+                }
+            }
+            
+            cache()->forget($cacheKey);
+        } catch (\Exception $e) {
+            $health['checks']['cache'] = [
+                'status' => 'error',
+                'message' => 'Cache system error: ' . $e->getMessage()
             ];
-        } else {
-            $health['checks']['tenant_databases']['message'] = "All {$tenants->count()} tenant databases are healthy";
+            if ($health['status'] === 'healthy') {
+                $health['status'] = 'warning';
+            }
         }
+
+        // Check storage system
+        try {
+            $testFile = storage_path('app/health_check_test.txt');
+            $testContent = 'health_test_' . time();
+            
+            \Illuminate\Support\Facades\File::put($testFile, $testContent);
+            $readContent = \Illuminate\Support\Facades\File::get($testFile);
+            \Illuminate\Support\Facades\File::delete($testFile);
+            
+            if ($readContent === $testContent) {
+                $health['checks']['storage'] = [
+                    'status' => 'ok',
+                    'message' => 'Storage system operational'
+                ];
+            } else {
+                $health['checks']['storage'] = [
+                    'status' => 'error',
+                    'message' => 'Storage read/write verification failed'
+                ];
+                $health['status'] = 'unhealthy';
+            }
+        } catch (\Exception $e) {
+            $health['checks']['storage'] = [
+                'status' => 'error',
+                'message' => 'Storage system error: ' . $e->getMessage()
+            ];
+            $health['status'] = 'unhealthy';
+        }
+
+        // Check memory usage
+        $memoryUsage = memory_get_usage(true);
+        $memoryLimit = $this->getMemoryLimit();
+        $memoryPercent = $memoryLimit > 0 ? ($memoryUsage / $memoryLimit) * 100 : 0;
+
+        if ($memoryPercent < 80) {
+            $health['checks']['memory'] = [
+                'status' => 'ok',
+                'message' => sprintf('Memory usage: %.1f%% (%s / %s)', 
+                    $memoryPercent, 
+                    $this->formatBytes($memoryUsage), 
+                    $this->formatBytes($memoryLimit)
+                )
+            ];
+        } elseif ($memoryPercent < 95) {
+            $health['checks']['memory'] = [
+                'status' => 'warning',
+                'message' => sprintf('High memory usage: %.1f%%', $memoryPercent)
+            ];
+            if ($health['status'] === 'healthy') {
+                $health['status'] = 'warning';
+            }
+        } else {
+            $health['checks']['memory'] = [
+                'status' => 'error',
+                'message' => sprintf('Critical memory usage: %.1f%%', $memoryPercent)
+            ];
+            $health['status'] = 'unhealthy';
+        }
+
+        // Add summary information
+        $health['summary'] = [
+            'total_tenants' => Tenant::count(),
+            'active_tenants' => Tenant::where('status', 'active')->count(),
+            'memory_usage' => $this->formatBytes($memoryUsage),
+            'cache_driver' => config('cache.default'),
+            'timestamp' => now()->toISOString()
+        ];
 
         return $health;
     }
@@ -465,19 +578,12 @@ class TenantService
     private function checkTenantDatabase(string $databaseName): bool
     {
         try {
-            // First try using stancl/tenancy's database manager
-            $databaseManager = app(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class);
-            
-            if (method_exists($databaseManager, 'databaseExists')) {
-                return $databaseManager->databaseExists($databaseName);
-            }
-            
-            // Fallback to direct SQL query
+            // Use direct SQL query for reliable database existence check
             $result = DB::select("SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME = ?", [$databaseName]);
             return !empty($result);
             
         } catch (\Exception $e) {
-            Log::warning("Database existence check failed: " . $e->getMessage());
+            Log::warning("Database existence check failed for {$databaseName}: " . $e->getMessage());
             return false;
         }
     }
@@ -657,5 +763,43 @@ class TenantService
 </div>
 @endsection
 BLADE;
+    }
+
+    /**
+     * Get PHP memory limit in bytes
+     */
+    private function getMemoryLimit(): int
+    {
+        $memoryLimit = ini_get('memory_limit');
+        
+        if ($memoryLimit === '-1') {
+            return PHP_INT_MAX; // No limit
+        }
+        
+        $value = (int) $memoryLimit;
+        $unit = strtolower(substr($memoryLimit, -1));
+        
+        return match ($unit) {
+            'g' => $value * 1024 * 1024 * 1024,
+            'm' => $value * 1024 * 1024,
+            'k' => $value * 1024,
+            default => $value
+        };
+    }
+
+    /**
+     * Format bytes to human readable format
+     */
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes === 0) return '0 B';
+        
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        
+        for ($i = 0; $bytes >= 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+        
+        return round($bytes, 2) . ' ' . $units[$i];
     }
 }

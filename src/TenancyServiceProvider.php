@@ -12,14 +12,7 @@ use ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware;
 use ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolverMiddleware;
-use ArtflowStudio\Tenancy\Commands\InstallTenancyCommand;
-use ArtflowStudio\Tenancy\Commands\TenantCommand;
-use ArtflowStudio\Tenancy\Commands\TenantDatabaseCommand;
-use ArtflowStudio\Tenancy\Commands\HealthCheckCommand;
-use ArtflowStudio\Tenancy\Commands\TestSystemCommand;
-use ArtflowStudio\Tenancy\Commands\TestPerformanceCommand;
-use ArtflowStudio\Tenancy\Commands\ComprehensiveTenancyTestCommand;
-use ArtflowStudio\Tenancy\Commands\QuickInstallTestCommand;
+// Command classes are auto-discovered from src/Commands (recursive). Avoid hard imports here to remain flexible.
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -45,17 +38,67 @@ class TenancyServiceProvider extends ServiceProvider
         ], 'af-tenancy-views');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([
-                InstallTenancyCommand::class,
-                TenantCommand::class,
-                TenantDatabaseCommand::class,
-                HealthCheckCommand::class,
-                TestSystemCommand::class,
-                TestPerformanceCommand::class,
-                ComprehensiveTenancyTestCommand::class,
-                \ArtflowStudio\Tenancy\Commands\ComprehensiveTestCommand::class,
-                QuickInstallTestCommand::class,
-            ]);
+            // Auto-discover command classes under src/Commands and src/Console/Commands
+            $commandClasses = [];
+
+            $baseDir = __DIR__ . '/Commands';
+            if (is_dir($baseDir)) {
+                $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($baseDir));
+                foreach ($it as $file) {
+                    if ($file->isFile() && $file->getExtension() === 'php') {
+                        $filePath = $file->getPathname();
+                        $relative = substr($filePath, strlen($baseDir) + 1); // path after Commands/
+                        $relative = str_replace(['\\', '/'], '\\', $relative);
+                        $class = '\\ArtflowStudio\\Tenancy\\Commands\\' . str_replace('\\', '\\', substr($relative, 0, -4));
+                        // Convert path separators to namespace separators
+                        $class = str_replace('\\', '\\', $class);
+                        if (class_exists($class) || @class_exists($class)) {
+                            $commandClasses[] = $class;
+                        }
+                    }
+                }
+            }
+
+            $consoleCommandsDir = __DIR__ . '/Console/Commands';
+            if (is_dir($consoleCommandsDir)) {
+                $it = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($consoleCommandsDir));
+                foreach ($it as $file) {
+                    if ($file->isFile() && $file->getExtension() === 'php') {
+                        $filePath = $file->getPathname();
+                        $relative = substr($filePath, strlen($consoleCommandsDir) + 1);
+                        $relative = str_replace(['\\', '/'], '\\', $relative);
+                        $class = '\\ArtflowStudio\\Tenancy\\Console\\Commands\\' . str_replace('\\', '\\', substr($relative, 0, -4));
+                        if (class_exists($class) || @class_exists($class)) {
+                            $commandClasses[] = $class;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: register known commands already imported above if discovery missed them
+            $fallback = [
+                // Tenancy group
+                \ArtflowStudio\Tenancy\Commands\Tenancy\InstallTenancyCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Tenancy\TenantCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Tenancy\HealthCheckCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Tenancy\CreateTestTenantsCommand::class,
+
+                // Database group
+                \ArtflowStudio\Tenancy\Commands\Database\TenantDatabaseCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Database\FixTenantDatabasesCommand::class,
+
+                // Testing group
+                \ArtflowStudio\Tenancy\Commands\Testing\TestSystemCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\TestPerformanceCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\QuickInstallTestCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\ComprehensiveTestCommand::class,
+            ];
+
+            $allCommands = array_values(array_unique(array_merge($commandClasses, $fallback)));
+
+            if (!empty($allCommands)) {
+                $this->commands($allCommands);
+            }
         }
 
         $this->registerMiddleware();

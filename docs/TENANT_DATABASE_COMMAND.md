@@ -1,11 +1,16 @@
-# Tenant Database Command Documentation
+# 🗄️ Tenant Database Commands - Complete Reference
 
 ## Overview
-The `tenant:db` command provides comprehensive database management for individual tenants or all tenants at once. This command separates database operations from general tenant management for better organization and more specialized functionality.
+The `tenant:db` command provides comprehensive database management for individual tenants or all tenants at once. This command separates database operations from general tenant management for better organization.
 
-## Command Signature
+## Quick Start
 ```bash
-php artisan tenant:db {operation?} [options]
+# Interactive mode - easiest way to start
+php artisan tenant:db
+
+# Direct operations
+php artisan tenant:db migrate --tenant=uuid-123
+php artisan tenant:db seed --class=UserSeeder --tenant=uuid-123
 ```
 
 ## Available Operations
@@ -21,33 +26,43 @@ php artisan tenant:db {operation?} [options]
 | `reset` | Rollback all migrations | `tenant:db reset` |
 | `refresh` | Rollback and re-run migrations | `tenant:db refresh` |
 
+## Tenant Selection Methods
+
+### Method 1: Command Line
+```bash
+php artisan tenant:db migrate --tenant=uuid-or-name
+```
+
+### Method 2: Interactive List
+```bash
+php artisan tenant:db migrate
+# Shows table of all tenants, pick one by number
+```
+
+### Method 3: Search by Name
+```bash
+# Command prompts: "Enter tenant name to search"
+# Type: "acme" → finds "Acme Corporation", "Acme Industries"
+```
+
+### Method 4: UUID Entry
+```bash
+# Command prompts: "Enter tenant UUID"
+# Paste full UUID for exact match
+```
+
 ## Available Options
 
 | Option | Description | Example |
 |--------|-------------|---------|
-| `--tenant=UUID` | Target specific tenant by UUID or name | `--tenant=uuid-123` |
-| `--class=ClassName` | Specify seeder class name | `--class=UserSeeder` |
-| `--step=N` | Number of steps to rollback | `--step=3` |
-| `--force` | Force operation without confirmation | `--force` |
+| `--tenant=UUID` | Target specific tenant | `--tenant=uuid-123` |
+| `--class=ClassName` | Specify seeder class | `--class=UserSeeder` |
+| `--step=N` | Steps to rollback | `--step=3` |
+| `--force` | Force without confirmation | `--force` |
 | `--seed` | Run seeders after migration | `--seed` |
-| `--all` | Run operation for all active tenants | `--all` |
+| `--all` | Apply to all active tenants | `--all` |
 | `--status=active` | Filter tenants by status | `--status=inactive` |
-| `--pretend` | Show what would be migrated (dry run) | `--pretend` |
-
-## Usage Examples
-
-### Interactive Mode
-```bash
-# Start interactive mode - command will guide you through options
-php artisan tenant:db
-```
-
-### Direct Operations
-```bash
-# Run migrations for specific tenant
-php artisan tenant:db migrate --tenant=tenant-uuid-123
-
-# Run fresh migration with seeding
+| `--pretend` | Show what would run (dry run) | `--pretend` |
 php artisan tenant:db migrate:fresh --seed --tenant=tenant-name
 
 # Run specific seeder

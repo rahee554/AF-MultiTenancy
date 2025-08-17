@@ -1,8 +1,15 @@
-# 🚀 AF-MultiTenancy - Installation Guide
+# 🚀 ArtFlow Studio Tenancy - Installation Guide
 
-Complete installation guide for the high-performance Laravel multi-tenancy package.
+**Complete installation guide for the Laravel multi-tenancy package built on stancl/tenancy**
 
-## 📋 Quick Installation
+## 📋 Prerequisites
+
+- Laravel 10+ (or Laravel 11+)
+- PHP 8.1+
+- MySQL 8.0+ or MariaDB 10.4+
+- Composer 2.0+
+
+## 🚀 Quick Installation
 
 ### Method 1: One-Command Installation (Recommended)
 
@@ -34,16 +41,22 @@ composer require artflow-studio/tenancy
 php artisan vendor:publish --tag=tenancy-config
 php artisan vendor:publish --tag=artflow-tenancy-config
 
-# 3. Publish documentation and stubs
-php artisan vendor:publish --tag=tenancy-docs
-php artisan vendor:publish --tag=tenancy-stubs
-
-# 4. Run migrations
+# 3. Run migrations
 php artisan migrate
 php artisan tenants:migrate
 
-# 5. Clear caches
+# 4. Clear caches
 php artisan config:clear
+```
+
+### Step 3: Test the Installation
+
+```bash
+# Comprehensive system test
+php artisan tenancy:test-system
+
+# Or run all available tests
+php artisan tenancy:comprehensive-test
 ```
 
 ## ⚙️ Environment Configuration

@@ -1,4 +1,8 @@
-# Smart Domain Resolver Middleware
+# 🎯 Smart Domain Resolver - Complete Guide
+
+## Overview
+
+The Smart Domain Resolver automatically detects whether a request is from a central domain (admin) or tenant domain, applying the appropriate context without requiring separate route definitions.
 
 ## The Problem This Solves
 
@@ -6,98 +10,40 @@ You have routes like `/login`, `/dashboard`, `/profile` that need to work on **b
 - **Central domains** (localhost, admin.yoursite.com) - for admin users
 - **Tenant domains** (tenant1.yoursite.com, tenant2.yoursite.com) - for tenant users
 
-Previously, you needed separate routes or complex logic. Now, with `central.tenant.web` middleware, the **same route works intelligently on both domain types**.
+## Quick Start
 
-## How It Works
-
-The `SmartDomainResolverMiddleware` automatically detects:
-1. **Is this a central domain?** → No tenant context, standard Laravel behavior
-2. **Is this a tenant domain?** → Full tenant context with session scoping
-
-## Usage
-
-### Basic Usage
+### 1. Use the Smart Middleware
 ```php
 // routes/web.php - These routes work on BOTH central and tenant domains
 Route::middleware(['central.tenant.web'])->group(function () {
     Route::get('login', [AuthController::class, 'showLoginForm'])->name('login');
     Route::post('login', [AuthController::class, 'login']);
     Route::get('dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('profile', [ProfileController::class, 'show'])->name('profile');
 });
 ```
 
-### What Happens Automatically
-
-#### On Central Domain (localhost, admin.yoursite.com):
-```php
-// When user visits: http://localhost/login
-// Middleware detects: This is a central domain
-// Context provided to controller:
-$request->attributes->get('domain_type');    // 'central'
-$request->attributes->get('is_central');     // true  
-$request->attributes->get('is_tenant');      // false
-$request->attributes->get('tenant');         // null
-
-// Views automatically get:
-view('login', [
-    'domainType' => 'central',
-    'isCentral' => true,
-    'isTenant' => false,
-    'currentTenant' => null
-]);
-```
-
-#### On Tenant Domain (tenant1.yoursite.com):
-```php
-// When user visits: http://tenant1.yoursite.com/login  
-// Middleware detects: This is a tenant domain
-// Context provided to controller:
-$request->attributes->get('domain_type');    // 'tenant'
-$request->attributes->get('is_central');     // false
-$request->attributes->get('is_tenant');      // true
-$request->attributes->get('tenant');         // Tenant object for tenant1
-
-// Views automatically get:
-view('login', [
-    'domainType' => 'tenant',
-    'isCentral' => false,
-    'isTenant' => true,
-    'currentTenant' => $tenantObject
-]);
-```
-
-## Controller Examples
-
-### Shared Authentication Controller
+### 2. Access Context in Controllers
 ```php
 class AuthController extends Controller
 {
     public function showLoginForm(Request $request)
     {
-        // Automatically available in all controllers
         $domainType = $request->attributes->get('domain_type'); // 'central' or 'tenant'
         $currentTenant = $request->attributes->get('tenant');   // null or Tenant object
         
-        // Same view, different context automatically
-        return view('auth.login'); // Gets domainType, isCentral, isTenant, currentTenant variables
+        return view('auth.login'); // Gets context variables automatically
     }
-    
-    public function login(Request $request)
-    {
-        if ($request->attributes->get('is_central')) {
-            // Central domain login - admin users
-            return $this->attemptCentralLogin($request);
-        } else {
-            // Tenant domain login - tenant users  
-            $tenant = $request->attributes->get('tenant');
-            return $this->attemptTenantLogin($request, $tenant);
-        }
-    }
-    
-    private function attemptCentralLogin(Request $request)
-    {
-        // Use admin guard, redirect to central dashboard
+}
+```
+
+### 3. Use Context in Views
+```blade
+@if($isCentral)
+    <h1>Admin Login</h1>
+@else
+    <h1>Welcome to {{ $currentTenant->name }}</h1>
+@endif
+```
         if (Auth::guard('admin')->attempt($request->only('email', 'password'))) {
             return redirect()->route('admin.dashboard');
         }

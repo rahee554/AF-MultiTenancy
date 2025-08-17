@@ -160,7 +160,11 @@ artflow-studio/tenancy/
 ├── 📂 routes/
 │   └── af-tenancy.php          # Package routes
 ├── 📂 src/
-│   ├── 📂 Commands/            # 20+ CLI commands
+│   ├── 📂 Commands/            # 20+ CLI commands (organized into subfolders)
+│   │   ├── 📂 Database/         # Database-related CLI commands
+│   │   ├── 📂 Tenancy/          # Tenant management commands
+│   │   └── 📂 Testing/          # Testing, diagnostics, and performance commands
+│   │   # Note: Some commands were previously located in `src/Console/Commands` and have been moved here.
 │   ├── 📂 Http/
 │   │   ├── Controllers/        # API & web controllers
 │   │   └── Middleware/         # Enhanced middleware
