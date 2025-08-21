@@ -1,0 +1,52 @@
+
+/* init Variables */
+:root {
+    --bs-app-header-height: 80px;
+    --app-bg-color: #fafafa;
+    --app-bg-color-dark: rgb(0, 0, 0);
+    --app-landing-bg-color-dark: #06070b;
+
+    /* InnerContent Box Color */
+    /* --bs-app-content-bg-color: #ffffff; */
+}
+
+/* begin :: Layout Adjustment */
+[data-bs-theme="light"] {
+    --bs-app-sidebar-base-bg-color: var(--app-bg-color);
+    --bs-app-header-base-bg-color: var(--app-bg-color);
+    --bs-app-bg-color: var(--app-bg-color);
+}
+[data-bs-theme="dark"] {
+    --bs-app-sidebar-base-bg-color: var(--app-bg-color-dark);
+    --bs-app-header-base-bg-color: var(--app-bg-color-dark);
+    --bs-app-bg-color: var(--app-bg-color-dark);
+    --bs-body-bg: var(--app-landing-bg-color-dark);
+}
+
+@media (min-width: 992px) {
+    body:not([data-kt-app-aside-enabled="true"]) .app-main {
+        margin-left: 20px;
+    }
+    body:not([data-kt-app-sidebar-collapse="on"]) .app-main {
+        margin-left: 0px;
+    }
+    .app-content {
+        border-radius: 12px;
+    }
+}
+.app-content , .app-header-separator{
+    border: 0px!important;
+    box-shadow: none;
+}
+
+/* end :: Layout Adjustment */
+
+/* begin :: Sidebar Menu CSS */
+.menu-title {
+    font-weight: 400 !important;
+}
+.menu-link.active .menu-title {
+    font-weight: 600 !important;
+}
+/* end :: Sidebar Menu CSS */
+

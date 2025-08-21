@@ -16,8 +16,8 @@ class TestPerformanceCommand extends Command
      * The name and signature of the console command.
      */
     protected $signature = 'tenancy:test-performance 
-                            {--concurrent-users=100 : Number of concurrent users to simulate}
-                            {--duration=60 : Test duration in seconds}
+                            {--concurrent-users=50 : Number of concurrent users to simulate}
+                            {--duration=30 : Test duration in seconds}
                             {--requests-per-user=10 : Requests per user}
                             {--test-isolation : Include database isolation testing}
                             {--test-persistence : Test database persistence across connections}';

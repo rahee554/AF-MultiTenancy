@@ -355,12 +355,12 @@ class YourTenantService extends TenantService
         string $name,
         string $domain,
         string $status = 'active',
-        ?string $customDatabase = null,
+    ?string $databaseName = null,
         ?string $notes = null,
         bool $hasHomepage = false
     ): Tenant {
         // Your custom logic before creation
-        $tenant = parent::createTenant($name, $domain, $status, $customDatabase, $notes, $hasHomepage);
+    $tenant = parent::createTenant($name, $domain, $status, $databaseName, $notes, $hasHomepage);
         // Your custom logic after creation
         return $tenant;
     }

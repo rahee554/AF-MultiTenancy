@@ -27,36 +27,40 @@ class InstallTenancyCommand extends Command
         $this->newLine();
 
         try {
-            // Step 1: Publish configurations
-            $this->info('📋 Step 1: Publishing configuration files...');
+            // Step 1/9: Publish configurations
+            $this->info('📋 Step 1/9: Publishing configuration files...');
             $this->publishConfigurations();
             
-            // Step 2: Copy migrations
-            $this->info('📋 Step 2: Publishing migrations...');
+            // Step 2/9: Publish migrations
+            $this->info('📋 Step 2/9: Publishing migrations...');
             $this->publishMigrations();
-            
-            // Step 3: Publish stubs and documentation
-            $this->info('📋 Step 3: Publishing documentation and stubs...');
+
+            // Step 3/9: Publish seeders
+            $this->info('📋 Step 3/9: Publishing seeders...');
+            $this->publishSeeders();
+
+            // Step 4/9: Publish documentation and stubs
+            $this->info('📋 Step 4/9: Publishing documentation and stubs...');
             $this->publishDocumentation();
             
-            // Step 4: Update database configuration
-            $this->info('📋 Step 4: Updating database configuration...');
+            // Step 5/9: Update database configuration
+            $this->info('📋 Step 5/9: Updating database configuration...');
             $this->updateDatabaseConfiguration();
             
-            // Step 5: Update environment file
-            $this->info('📋 Step 5: Updating environment configuration...');
+            // Step 6/9: Update environment file
+            $this->info('📋 Step 6/9: Updating environment configuration...');
             $this->updateEnvironment();
             
-            // Step 6: Run migrations
-            $this->info('📋 Step 6: Running migrations...');
+            // Step 7/9: Run migrations
+            $this->info('📋 Step 7/9: Running migrations...');
             $this->runMigrations();
             
-            // Step 7: Setup cached lookup
-            $this->info('📋 Step 7: Optimizing performance with cached lookup...');
+            // Step 8/9: Setup cached lookup for performance
+            $this->info('📋 Step 8/9: Optimizing performance with cached lookup...');
             $this->setupCachedLookup();
             
-            // Step 8: Clear caches
-            $this->info('📋 Step 8: Clearing application caches...');
+            // Step 9/9: Clear application caches
+            $this->info('📋 Step 9/9: Clearing application caches...');
             $this->clearCaches();
             
             $this->newLine();
@@ -115,6 +119,56 @@ class InstallTenancyCommand extends Command
                     $this->line("   ⚠️  {$fileName} already exists (skipped)");
                 }
             }
+        }
+    }
+    /**
+     * Publish package seeders
+     */
+    protected function publishSeeders(): void
+    {
+        // Copy tenancy seeders
+        $packageRoot = dirname(__DIR__, 3); // vendor/artflow-studio/tenancy
+        $sourcePath = $packageRoot . '/database/seeders';
+        $destinationPath = database_path('seeders');
+
+        if (!is_dir($sourcePath)) {
+            $this->line('   ⚠️  No seeders found to publish');
+            return;
+        }
+
+        // Ensure destination exists
+        if (!File::exists($destinationPath)) {
+            File::makeDirectory($destinationPath, 0755, true);
+            $this->line('   ✅ Created database/seeders directory');
+        }
+
+        // Copy recursively so nested 'tenant' folders are handled
+        $allFiles = File::allFiles($sourcePath);
+        foreach ($allFiles as $file) {
+            $relative = ltrim(str_replace($sourcePath, '', $file->getPathname()), DIRECTORY_SEPARATOR);
+            $targetPath = $destinationPath . DIRECTORY_SEPARATOR . $relative;
+
+            // Ensure target directory exists
+            $targetDir = dirname($targetPath);
+            if (!File::exists($targetDir)) {
+                File::makeDirectory($targetDir, 0755, true);
+            }
+
+            $fileName = $file->getFilename();
+            if (!File::exists($targetPath)) {
+                File::copy($file->getPathname(), $targetPath);
+                $this->line("   ✅ {$relative} copied");
+            } else {
+                $this->line("   ⚠️  {$relative} already exists (skipped)");
+            }
+        }
+
+        // Ensure TenantDatabaseSeeder is present in the shared seeders directory root
+        $tenantSeederSource = $sourcePath . '/TenantDatabaseSeeder.php';
+        $tenantSeederDestination = $destinationPath . '/TenantDatabaseSeeder.php';
+        if (File::exists($tenantSeederSource) && !File::exists($tenantSeederDestination)) {
+            File::copy($tenantSeederSource, $tenantSeederDestination);
+            $this->line("   ✅ TenantDatabaseSeeder.php copied to database/seeders/");
         }
     }
 

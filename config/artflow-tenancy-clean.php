@@ -7,16 +7,13 @@ return [
     |--------------------------------------------------------------------------
     |
     | Define middleware for UI and API routes.
-    | 
-    | Admin routes require authentication and admin role by default.
-    | You can customize these middleware groups as needed.
     |
     */
 
     'middleware' => [
-        'ui' => ['web'], // Basic UI routes
-        'api' => ['tenancy.api'], // API routes
-        'admin' => ['web', 'auth', 'role:admin'], // Admin routes - requires authentication and admin role
+        'ui' => ['web'], // Remove 'auth' for now, add as needed
+        'api' => ['tenancy.api'],
+        'admin' => ['web'], // Admin routes middleware
     ],
 
     /*

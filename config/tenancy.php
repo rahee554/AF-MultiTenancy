@@ -33,7 +33,7 @@ return [
         'suffix' => env('TENANT_DB_SUFFIX', ''),
 
         'managers' => [
-            'mysql' => \Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager::class, // Use default stancl manager
+            'mysql' => \Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager::class,
             'pgsql' => \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLDatabaseManager::class,
             'sqlite' => \Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager::class,
         ],
@@ -64,7 +64,10 @@ return [
     'features' => [
         // Enable as needed
         // \Stancl\Tenancy\Features\UserImpersonation::class,
-        // \Stancl\Tenancy\Features\TelescopeIntegration::class,
+        \Stancl\Tenancy\Features\TelescopeTags::class,
+        \ArtflowStudio\Tenancy\Features\EnhancedTelescopeTags::class,
+        \ArtflowStudio\Tenancy\Features\HorizonTags::class,
+        \ArtflowStudio\Tenancy\Features\OctaneIntegration::class,
         // \Stancl\Tenancy\Features\UniversalRoutes::class,
         // \Stancl\Tenancy\Features\TenantConfig::class,
         // \Stancl\Tenancy\Features\CrossDomainRedirect::class,

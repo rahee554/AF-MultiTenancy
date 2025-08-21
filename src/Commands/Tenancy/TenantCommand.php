@@ -7,6 +7,7 @@ use ArtflowStudio\Tenancy\Services\TenantService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 
 class TenantCommand extends Command
 {
@@ -67,7 +68,7 @@ class TenantCommand extends Command
         }
 
         return match ($action) {
-            'create' => $this->createTenant(),
+            'create' => $this->createTenantDeprecated(),
             'list' => $this->listTenants(),
             'delete' => $this->deleteTenant(),
             'deactivate' => $this->deactivateTenant(),
@@ -79,7 +80,41 @@ class TenantCommand extends Command
         };
     }
 
-    private function createTenant(): int
+    private function createTenantDeprecated(): int
+    {
+        $this->newLine();
+        $this->warn('⚠️  DEPRECATION WARNING');
+        $this->line('The "tenant:manage create" command is deprecated.');
+        $this->newLine();
+        $this->info('🚀 Please use the new enhanced tenant creation command:');
+        $this->line('   <fg=green>php artisan tenant:create</fg=green>');
+        $this->newLine();
+        $this->comment('The new command provides:');
+        $this->line('   • Interactive mode selection (localhost/FastPanel)');
+        $this->line('   • Automatic privilege checking');
+        $this->line('   • FastPanel user and site selection');
+        $this->line('   • Better database user management');
+        $this->line('   • Enhanced error handling');
+        $this->newLine();
+
+        if ($this->confirm('Continue with the old command anyway?', false)) {
+            return $this->createTenantLegacy();
+        } else {
+            $this->info('👍 Redirecting to the new command...');
+            $this->newLine();
+            return $this->call('tenant:create', [
+                '--name' => $this->option('name'),
+                '--domain' => $this->option('domain'),
+                '--database' => $this->option('database'),
+                '--status' => $this->option('status'),
+                '--homepage' => $this->option('homepage'),
+                '--notes' => $this->option('notes'),
+                '--force' => $this->option('force'),
+            ]);
+        }
+    }
+
+    private function createTenantLegacy(): int
     {
         $name = $this->option('name') ?: $this->ask('Tenant name');
         $domain = $this->option('domain') ?: $this->ask('Tenant domain');
@@ -98,6 +133,12 @@ class TenantCommand extends Command
 
         if (!$name || !$domain) {
             $this->error('Name and domain are required');
+            return 1;
+        }
+
+        // Check database privileges before proceeding
+        if (!$this->checkDatabasePrivileges()) {
+            $this->error('❌ Database privilege check failed. Cannot create tenant.');
             return 1;
         }
 
@@ -184,12 +225,11 @@ class TenantCommand extends Command
             return 0;
         }
 
-        $headers = ['ID', 'UUID', 'Name', 'Domain', 'Database', 'Homepage', 'Status', 'Created'];
+        $headers = ['ID', 'Name', 'Domain', 'Database', 'Homepage', 'Status', 'Created'];
         $rows = $tenants->map(function ($tenant) {
             $primaryDomain = $tenant->domains()->first();
             return [
                 $tenant->id,
-                Str::limit($tenant->id, 8) . '...',
                 $tenant->name,
                 $primaryDomain ? $primaryDomain->domain : 'No domain',
                 $tenant->getDatabaseName(),
@@ -351,6 +391,16 @@ class TenantCommand extends Command
         try {
             $health = $this->tenantService->checkSystemHealth();
             
+            // Add additional checks
+            $additionalChecks = $this->performAdditionalHealthChecks();
+            $health['checks'] = array_merge($health['checks'], $additionalChecks);
+            
+            // Recalculate overall status
+            $hasErrors = collect($health['checks'])->contains(function($check) {
+                return $check['status'] !== 'ok';
+            });
+            $health['status'] = $hasErrors ? 'unhealthy' : 'healthy';
+            
             $overallStatus = $health['status'] === 'healthy' ? '✅ HEALTHY' : '❌ UNHEALTHY';
             $this->info("🎯 System Status: {$overallStatus}");
             $this->newLine();
@@ -383,6 +433,111 @@ class TenantCommand extends Command
             $this->error('❌ Health check failed: ' . $e->getMessage());
             return 1;
         }
+    }
+
+    /**
+     * Perform additional health checks beyond the basic tenant service checks
+     */
+    private function performAdditionalHealthChecks(): array
+    {
+        $checks = [];
+
+        // Database privilege check
+        try {
+            $currentUser = $this->getCurrentDatabaseUser();
+            $hasPrivileges = $this->hasCreateDatabasePrivilege($currentUser);
+            $checks['database_privileges'] = [
+                'status' => $hasPrivileges ? 'ok' : 'error',
+                'message' => $hasPrivileges 
+                    ? "User '{$currentUser}' has CREATE privileges" 
+                    : "User '{$currentUser}' lacks CREATE DATABASE privileges"
+            ];
+        } catch (\Exception $e) {
+            $checks['database_privileges'] = [
+                'status' => 'error',
+                'message' => 'Could not check database privileges: ' . $e->getMessage()
+            ];
+        }
+
+        // File system permissions check
+        $tenantViewsPath = resource_path('views/tenant');
+        if (!is_dir($tenantViewsPath)) {
+            try {
+                mkdir($tenantViewsPath, 0755, true);
+            } catch (\Exception $e) {
+                // Ignore if we can't create
+            }
+        }
+        
+        $viewsWritable = is_dir($tenantViewsPath) && is_writable($tenantViewsPath);
+        $checks['tenant_views_writable'] = [
+            'status' => $viewsWritable ? 'ok' : 'error',
+            'message' => $viewsWritable 
+                ? 'Tenant views directory is writable' 
+                : 'Tenant views directory not writable (needed for homepage creation)'
+        ];
+
+        // Storage directory check
+        $storageWritable = is_writable(storage_path());
+        $checks['storage_writable'] = [
+            'status' => $storageWritable ? 'ok' : 'error',
+            'message' => $storageWritable 
+                ? 'Storage directory is writable' 
+                : 'Storage directory not writable'
+        ];
+
+        // Public directory check (for asset linking)
+        $publicWritable = is_writable(public_path());
+        $checks['public_writable'] = [
+            'status' => $publicWritable ? 'ok' : 'error',
+            'message' => $publicWritable 
+                ? 'Public directory is writable' 
+                : 'Public directory not writable (needed for asset linking)'
+        ];
+
+        // FastPanel compatibility check (if enabled)
+        if (env('FASTPANEL_ENABLED', false)) {
+            $fastPanelCli = env('FASTPANEL_CLI_PATH', '/usr/local/fastpanel2/fastpanel');
+            $fastPanelWorking = file_exists($fastPanelCli);
+            
+            if ($fastPanelWorking) {
+                $testCommand = "sudo {$fastPanelCli} --version 2>/dev/null";
+                $output = shell_exec($testCommand);
+                $fastPanelWorking = !empty($output);
+            }
+            
+            $checks['fastpanel_compatibility'] = [
+                'status' => $fastPanelWorking ? 'ok' : 'error',
+                'message' => $fastPanelWorking 
+                    ? 'FastPanel CLI accessible' 
+                    : 'FastPanel CLI not accessible or not found'
+            ];
+        }
+
+        // Environment checks
+        $dbConfig = config('database.connections.' . config('database.default'));
+        $configMapping = [
+            'DB_CONNECTION' => config('database.default'),
+            'DB_HOST' => $dbConfig['host'] ?? null,
+            'DB_DATABASE' => $dbConfig['database'] ?? null,
+            'DB_USERNAME' => $dbConfig['username'] ?? null,
+        ];
+        
+        $missingConfigs = [];
+        foreach ($configMapping as $key => $value) {
+            if (empty($value)) {
+                $missingConfigs[] = $key;
+            }
+        }
+        
+        $checks['environment_config'] = [
+            'status' => empty($missingConfigs) ? 'ok' : 'error',
+            'message' => empty($missingConfigs) 
+                ? 'All required database configuration present' 
+                : 'Missing configuration: ' . implode(', ', $missingConfigs)
+        ];
+
+        return $checks;
     }
 
     private function showHelp(): int
@@ -436,5 +591,186 @@ class TenantCommand extends Command
         $this->comment('For more database operations: php artisan tenant:db --help');
         
         return 1;
+    }
+
+    /**
+     * Check if current database user has CREATE DATABASE privileges
+     */
+    private function checkDatabasePrivileges(): bool
+    {
+        try {
+            $this->info('🔍 Checking database privileges...');
+            
+            // Check current user privileges
+            $currentUser = $this->getCurrentDatabaseUser();
+            $this->info("📋 Current database user: {$currentUser}");
+            
+            if ($this->hasCreateDatabasePrivilege($currentUser)) {
+                $this->info('✅ Current user has CREATE DATABASE privilege');
+                return true;
+            }
+            
+            $this->warn("⚠️  Current user '{$currentUser}' does not have CREATE DATABASE privilege");
+            
+            // Check if we have root credentials in env
+            $rootUser = env('DB_ROOT_USER');
+            $rootPassword = env('DB_ROOT_PASSWORD');
+            
+            if ($rootUser && $rootPassword) {
+                $this->info("🔑 Using root credentials from environment");
+                return $this->switchToRootUser($rootUser, $rootPassword);
+            }
+            
+            // Show available users and let user select
+            return $this->selectPrivilegedUser();
+            
+        } catch (\Exception $e) {
+            $this->error("❌ Error checking database privileges: {$e->getMessage()}");
+            return false;
+        }
+    }
+
+    /**
+     * Get current database user
+     */
+    private function getCurrentDatabaseUser(): string
+    {
+        try {
+            // Get the current connection configuration
+            $config = config('database.connections.' . config('database.default'));
+            return $config['username'] ?? 'unknown';
+        } catch (\Exception $e) {
+            return 'unknown';
+        }
+    }
+
+    /**
+     * Check if user has CREATE DATABASE privilege
+     */
+    private function hasCreateDatabasePrivilege(string $user): bool
+    {
+        try {
+            // For the current user, use SHOW GRANTS without specifying user
+            $grants = DB::select("SHOW GRANTS");
+            
+            foreach ($grants as $grant) {
+                $grantString = array_values((array)$grant)[0];
+                if (str_contains($grantString, 'ALL PRIVILEGES') || 
+                    (str_contains($grantString, 'CREATE') && str_contains($grantString, 'ON *.*'))) {
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            // Fallback: try to create and drop a test database
+            try {
+                $testDbName = 'tenancy_privilege_test_' . time();
+                DB::statement("CREATE DATABASE {$testDbName}");
+                DB::statement("DROP DATABASE {$testDbName}");
+                return true;
+            } catch (\Exception $e2) {
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Get all database users with CREATE privileges
+     */
+    private function getPrivilegedUsers(): array
+    {
+        try {
+            $users = DB::select("SELECT User, Host FROM mysql.user WHERE User != ''");
+            $privilegedUsers = [];
+            
+            foreach ($users as $user) {
+                $userString = $user->User . '@' . $user->Host;
+                if ($this->hasCreateDatabasePrivilege($userString)) {
+                    $privilegedUsers[] = [
+                        'user' => $user->User,
+                        'host' => $user->Host,
+                        'full' => $userString
+                    ];
+                }
+            }
+            
+            return $privilegedUsers;
+        } catch (\Exception $e) {
+            $this->warn("Cannot fetch database users: {$e->getMessage()}");
+            return [];
+        }
+    }
+
+    /**
+     * Let user select a privileged database user
+     */
+    private function selectPrivilegedUser(): bool
+    {
+        $privilegedUsers = $this->getPrivilegedUsers();
+        
+        if (empty($privilegedUsers)) {
+            $this->error('❌ No users with CREATE DATABASE privileges found');
+            return false;
+        }
+        
+        $this->info('🔍 Found users with CREATE DATABASE privileges:');
+        $choices = [];
+        
+        foreach ($privilegedUsers as $index => $user) {
+            $choices[] = "{$user['user']}@{$user['host']}";
+            $this->info("  [{$index}] {$user['user']}@{$user['host']}");
+        }
+        
+        $selection = $this->choice('Select a user to use for database creation:', $choices);
+        $selectedUser = $privilegedUsers[array_search($selection, $choices)];
+        
+        // Ask for password
+        $password = $this->secret("Enter password for {$selectedUser['user']}:");
+        
+        return $this->switchToUser($selectedUser['user'], $password, $selectedUser['host']);
+    }
+
+    /**
+     * Switch to root user connection
+     */
+    private function switchToRootUser(string $username, string $password): bool
+    {
+        return $this->switchToUser($username, $password);
+    }
+
+    /**
+     * Switch database connection to different user
+     */
+    private function switchToUser(string $username, string $password, string $host = 'localhost'): bool
+    {
+        try {
+            // Create new database connection config
+            $newConfig = config('database.connections.' . config('database.default'));
+            $newConfig['username'] = $username;
+            $newConfig['password'] = $password;
+            $newConfig['host'] = $host;
+            
+            // Test the connection
+            $testConnection = new \PDO(
+                "mysql:host={$host};dbname=" . $newConfig['database'],
+                $username,
+                $password
+            );
+            
+            // Update the current connection config
+            config(['database.connections.' . config('database.default') => $newConfig]);
+            
+            // Reconnect
+            DB::purge(config('database.default'));
+            DB::reconnect(config('database.default'));
+            
+            $this->info("✅ Successfully switched to user: {$username}@{$host}");
+            return true;
+            
+        } catch (\Exception $e) {
+            $this->error("❌ Failed to switch to user {$username}: {$e->getMessage()}");
+            return false;
+        }
     }
 }

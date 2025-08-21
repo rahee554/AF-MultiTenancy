@@ -7,16 +7,13 @@ return [
     |--------------------------------------------------------------------------
     |
     | Define middleware for UI and API routes.
-    | 
-    | Admin routes require authentication and admin role by default.
-    | You can customize these middleware groups as needed.
     |
     */
 
     'middleware' => [
-        'ui' => ['web'], // Basic UI routes
-        'api' => ['tenancy.api'], // API routes
-        'admin' => ['web', 'auth', 'role:admin'], // Admin routes - requires authentication and admin role
+        'ui' => ['web'], // Remove 'auth' for now, add as needed
+        'api' => ['tenancy.api'],
+        'admin' => ['web'], // Admin routes middleware
     ],
 
     /*
@@ -39,6 +36,92 @@ return [
         'tenant_migrations_path' => 'database/migrations/tenant',
         'shared_migrations_path' => 'database/migrations',
         'auto_sync' => env('TENANT_AUTO_SYNC_MIGRATIONS', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Project Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Multi-project tenant dashboard configuration for identifying tenants
+    | across multiple SaaS applications using this package.
+    |
+    */
+    'project' => [
+        'id' => env('ARTFLOW_PROJECT_ID', 'default'),
+        'name' => env('ARTFLOW_PROJECT_NAME', 'My SaaS Project'),
+        'api_key' => env('ARTFLOW_PROJECT_API_KEY'),
+        'dashboard_url' => env('ARTFLOW_DASHBOARD_URL', 'https://dashboard.artflow.studio'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Integration Features
+    |--------------------------------------------------------------------------
+    |
+    | Enable/disable various Laravel ecosystem integrations
+    |
+    */
+    'integrations' => [
+        'telescope' => [
+            'enabled' => env('ARTFLOW_TELESCOPE_ENABLED', false),
+            'enhanced_tags' => true,
+            'central_database' => true,
+        ],
+        
+        'horizon' => [
+            'enabled' => env('ARTFLOW_HORIZON_ENABLED', false),
+            'tenant_tagging' => true,
+            'queue_monitoring' => true,
+        ],
+        
+        'octane' => [
+            'enabled' => env('ARTFLOW_OCTANE_ENABLED', false),
+            'cleanup_level' => 'aggressive', // 'basic', 'moderate', 'aggressive'
+            'memory_limit' => '512M',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Multi-Project Dashboard
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for the centralized multi-project dashboard
+    |
+    */
+    'dashboard' => [
+        'enabled' => env('ARTFLOW_DASHBOARD_ENABLED', false),
+        'sync_interval' => env('ARTFLOW_SYNC_INTERVAL', 300), // seconds
+        'metrics' => [
+            'tenants' => true,
+            'requests' => true,
+            'errors' => true,
+            'performance' => true,
+            'queues' => true,
+        ],
+        'webhook_url' => env('ARTFLOW_WEBHOOK_URL'),
+        'webhook_secret' => env('ARTFLOW_WEBHOOK_SECRET'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Server Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for different server environments (FastPanel, nginx, etc.)
+    |
+    */
+    'server' => [
+        'type' => env('ARTFLOW_SERVER_TYPE', 'standard'), // standard, fastpanel, docker
+        'octane_server' => env('OCTANE_SERVER', 'swoole'), // swoole, roadrunner
+        'nginx_config_path' => env('NGINX_CONFIG_PATH', '/etc/nginx/sites-available'),
+        'apache_config_path' => env('APACHE_CONFIG_PATH', '/etc/apache2/sites-available'),
+        'fastpanel' => [
+            'enabled' => env('FASTPANEL_ENABLED', false),
+            'api_url' => env('FASTPANEL_API_URL'),
+            'api_key' => env('FASTPANEL_API_KEY'),
+        ],
     ],
 
     /*
@@ -144,7 +227,7 @@ return [
         'enabled' => true,
         'route_prefix' => 'admin',
         'middleware' => ['web', 'auth'],
-        'layout' => 'artflow-tenancy::layout.app',
+        'layout' => 'layouts.admin.app',
     ],
 
     /*

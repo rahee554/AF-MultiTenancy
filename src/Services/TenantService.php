@@ -21,7 +21,7 @@ class TenantService
         string $name,
         string $domain,
         string $status = 'active',
-        ?string $customDatabase = null,
+        ?string $databaseName = null,
         ?string $notes = null,
         bool $hasHomepage = false
     ): Tenant {
@@ -30,7 +30,7 @@ class TenantService
             $tenantId = (string) Str::uuid();
             
             // Determine database name
-            $databaseName = $customDatabase ?: ('tenant_' . str_replace('-', '', $tenantId));
+            $databaseName = $databaseName ?: ('tenant_' . str_replace('-', '', $tenantId));
             
             // Create the physical database first (outside transaction)
             $this->createPhysicalDatabase($databaseName);
@@ -42,7 +42,7 @@ class TenantService
             $tenant = Tenant::create([
                 'id' => $tenantId,
                 'name' => $name,
-                'database' => $customDatabase, // Store custom name if provided
+                'database' => $databaseName, // Store custom name if provided
                 'status' => $status,
                 'has_homepage' => $hasHomepage,
                 'data' => [
@@ -182,7 +182,7 @@ class TenantService
      */
     public function migrateAllTenants(bool $fresh = false): array
     {
-        $tenants = Tenant::active()->get();
+        $tenants = Tenant::where('status', 'active')->get();
         $results = ['success' => 0, 'failed' => 0, 'errors' => []];
 
         foreach ($tenants as $tenant) {
@@ -203,7 +203,7 @@ class TenantService
      */
     public function seedAllTenants(): array
     {
-        $tenants = Tenant::active()->get();
+        $tenants = Tenant::where('status', 'active')->get();
         $results = ['success' => 0, 'failed' => 0, 'errors' => []];
 
         foreach ($tenants as $tenant) {
@@ -266,8 +266,8 @@ class TenantService
     public function getSystemStats(): array
     {
         $totalTenants = Tenant::count();
-        $activeTenants = Tenant::active()->count();
-        $inactiveTenants = Tenant::inactive()->count();
+        $activeTenants = Tenant::where('status', 'active')->count();
+        $inactiveTenants = Tenant::where('status', 'inactive')->count();
         
         // Get database health statistics
         $healthyDatabases = 0;
@@ -275,7 +275,7 @@ class TenantService
         $totalConnections = 0;
         
         try {
-            $tenants = Tenant::active()->get();
+            $tenants = Tenant::where('status', 'active')->get();
             foreach ($tenants as $tenant) {
                 if ($this->checkTenantDatabase($tenant->getDatabaseName())) {
                     $healthyDatabases++;

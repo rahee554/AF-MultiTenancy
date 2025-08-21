@@ -23,6 +23,7 @@ class TenancyServiceProvider extends ServiceProvider
     {
         $this->loadRoutesFrom(__DIR__ . '/../routes/af-tenancy.php');
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'af-tenancy');
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'artflow-tenancy');
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
         $this->publishes([
@@ -36,6 +37,11 @@ class TenancyServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../resources/views' => resource_path('views/vendor/af-tenancy'),
         ], 'af-tenancy-views');
+
+        // Publish admin routes (optional admin UI)
+        $this->publishes([
+            __DIR__ . '/../routes/admin.php' => base_path('routes/tenancy-admin.php'),
+        ], 'af-tenancy-routes');
 
         if ($this->app->runningInConsole()) {
             // Auto-discover command classes under src/Commands and src/Console/Commands
@@ -77,20 +83,36 @@ class TenancyServiceProvider extends ServiceProvider
 
             // Fallback: register known commands already imported above if discovery missed them
             $fallback = [
+                // Core tenant commands
+                \ArtflowStudio\Tenancy\Commands\Core\CreateTenantCommand::class,
+
                 // Tenancy group
                 \ArtflowStudio\Tenancy\Commands\Tenancy\InstallTenancyCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Tenancy\TenantCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Tenancy\HealthCheckCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Tenancy\CreateTestTenantsCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Tenancy\LinkAssetsCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Tenancy\FastPanelCommand::class,
+
+                // FastPanel group
+                \ArtflowStudio\Tenancy\Commands\FastPanel\CreateTenantCommand::class,
+                \ArtflowStudio\Tenancy\Commands\FastPanel\ListUsersCommand::class,
+                \ArtflowStudio\Tenancy\Commands\FastPanel\ListDatabasesCommand::class,
+                \ArtflowStudio\Tenancy\Commands\FastPanel\SyncDatabaseCommand::class,
 
                 // Database group
                 \ArtflowStudio\Tenancy\Commands\Database\TenantDatabaseCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Database\FixTenantDatabasesCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Database\CheckPrivilegesCommand::class,
 
                 // Testing group
                 \ArtflowStudio\Tenancy\Commands\Testing\TestSystemCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Testing\TestPerformanceCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Testing\QuickInstallTestCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\ServerCompatibilityCommand::class,
+                
+                // Integration validation
+                \ArtflowStudio\Tenancy\Console\Commands\ValidateIntegrationsCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Testing\ComprehensiveTestCommand::class,
             ];
 
@@ -103,6 +125,49 @@ class TenancyServiceProvider extends ServiceProvider
 
         $this->registerMiddleware();
         $this->configureLivewire();
+        $this->registerAdminFeatures();
+    }
+
+    protected function registerAdminFeatures(): void
+    {
+        // Conditionally register admin routes when configured
+        if (config('artflow-tenancy.admin.enabled', false)) {
+            $adminRoutes = __DIR__ . '/../routes/admin.php';
+            if (file_exists($adminRoutes)) {
+                $this->loadRoutesFrom($adminRoutes);
+            }
+        }
+
+        // If Livewire exists, optionally register components explicitly
+        if (class_exists(\Livewire\Livewire::class)) {
+            // Register critical dotted aliases first to ensure compiled views referencing
+            // long dotted component names can always be resolved even if other
+            // registrations fail during static analysis.
+            try {
+                \Livewire\Livewire::component('artflow-studio.tenancy.http.livewire.admin.queue-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\QueueMonitoring::class);
+            } catch (\Throwable $_e) {
+                // ignore - best-effort
+            }
+
+            try {
+                \Livewire\Livewire::component('af-tenancy.admin.dashboard', \ArtflowStudio\Tenancy\Http\Livewire\Admin\Dashboard::class);
+                \Livewire\Livewire::component('af-tenancy.admin.tenants-index', \ArtflowStudio\Tenancy\Http\Livewire\Admin\TenantsIndex::class);
+                \Livewire\Livewire::component('af-tenancy.admin.create-tenant', \ArtflowStudio\Tenancy\Http\Livewire\Admin\CreateTenant::class);
+                \Livewire\Livewire::component('af-tenancy.admin.view-tenant', \ArtflowStudio\Tenancy\Http\Livewire\Admin\ViewTenant::class);
+
+                // Additional admin components
+                \Livewire\Livewire::component('af-tenancy.admin.queue-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\QueueMonitoring::class);
+                \Livewire\Livewire::component('af-tenancy.admin.system-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\SystemMonitoring::class);
+                \Livewire\Livewire::component('af-tenancy.admin.tenant-analytics', \ArtflowStudio\Tenancy\Http\Livewire\Admin\TenantAnalytics::class);
+
+                // Also register the dotted FQCN style aliases that may be referenced in compiled views
+                \Livewire\Livewire::component('artflow-studio.tenancy.http.livewire.admin.queue-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\QueueMonitoring::class);
+                \Livewire\Livewire::component('artflow-studio.tenancy.http.livewire.admin.system-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\SystemMonitoring::class);
+                \Livewire\Livewire::component('artflow-studio.tenancy.http.livewire.admin.tenant-analytics', \ArtflowStudio\Tenancy\Http\Livewire\Admin\TenantAnalytics::class);
+            } catch (\Throwable $e) {
+                // Ignore registration errors during static analysis or when Livewire not fully booted
+            }
+        }
     }
 
     /**
@@ -195,13 +260,35 @@ class TenancyServiceProvider extends ServiceProvider
     {
         if (class_exists(Livewire::class)) {
             // Configure Livewire to work properly with tenants
+            // Register persistent middleware immediately
+            Livewire::addPersistentMiddleware([
+                \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+                \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
+            ]);
+
+            // Resolve missing dotted component names by converting dotted names
+            // into a studly FQCN. This ensures compiled snapshots referencing
+            // vendor dotted component names can be instantiated.
+            try {
+                Livewire::resolveMissingComponent(function ($name) {
+                    // Convert dotted name to studly class segments
+                    $segments = collect(explode('.', $name))->map(fn ($seg) => (string) \Illuminate\Support\Str::studly($seg));
+                    $class = '\\' . $segments->join('\\');
+
+                    if (class_exists($class) && is_subclass_of($class, \Livewire\Component::class)) {
+                        return $class;
+                    }
+
+                    return null;
+                });
+            } catch (\Throwable $_e) {
+                // best-effort
+            }
+
+            // Ensure persistent middleware is also added after application boot
             $this->app->booted(function () {
-                // Livewire middleware for tenancy
-                // Note: Session scoping is handled by ScopeSessions middleware in the middleware groups
-                Livewire::addPersistentMiddleware([
-                    \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
-                    \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
-                ]);
+                // Note: nothing additional required here for now, but keep hook
+                // to align with previous behavior.
             });
         }
     }
