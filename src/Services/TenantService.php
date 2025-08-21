@@ -23,7 +23,8 @@ class TenantService
         string $status = 'active',
         ?string $databaseName = null,
         ?string $notes = null,
-        bool $hasHomepage = false
+        bool $hasHomepage = false,
+        bool $skipDatabaseCreation = false
     ): Tenant {
         try {
             // Generate unique tenant ID
@@ -32,8 +33,10 @@ class TenantService
             // Determine database name
             $databaseName = $databaseName ?: ('tenant_' . str_replace('-', '', $tenantId));
             
-            // Create the physical database first (outside transaction)
-            $this->createPhysicalDatabase($databaseName);
+            // Create the physical database first (outside transaction) unless skipped
+            if (!$skipDatabaseCreation) {
+                $this->createPhysicalDatabase($databaseName);
+            }
             
             // Now create tenant record in central database transaction
             DB::beginTransaction();

@@ -48,6 +48,34 @@ php artisan af-tenancy:test-all
 php artisan tenant:manage create
 ```
 
+### 🔐 Database Root Configuration (Required)
+
+For automatic tenant database creation, you need MySQL root credentials:
+
+**Option 1: Environment Variables (Recommended)**
+```bash
+# Add to your .env file
+DB_ROOT_USERNAME=root
+DB_ROOT_PASSWORD=your_mysql_root_password
+```
+
+**Option 2: Grant Privileges to App User**
+```sql
+GRANT CREATE ON *.* TO 'your_app_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+**Why Root Credentials?**
+- Creates tenant databases automatically
+- Grants proper MySQL privileges
+- Enables FastPanel integration
+- Ensures phpMyAdmin access
+
+**Security Notes:**
+- Root credentials are used temporarily during creation only
+- All database credentials are encrypted when stored
+- System follows principle of least privilege access
+
 ### Basic Usage in Routes
 
 ```php
@@ -148,6 +176,104 @@ php artisan tenancy:stress-test --users=50 --duration=60 --tenants=5
 ✅ Database Creation: 100% success rate
 ✅ Isolation Tests: All security validations passing
 ✅ Stress Test: Production-ready performance confirmed
+```
+
+## 🏢 Enhanced Tenant Creation
+
+### Interactive Tenant Creation Wizard
+
+Create tenants with our enhanced interactive wizard:
+
+```bash
+php artisan tenant:create
+```
+
+#### **Wizard Steps:**
+
+1. **Basic Information**
+   - Tenant name
+   - Domain name 
+   - Custom database name (optional - auto-generated if empty)
+   - Homepage preference
+   - Tenant notes
+
+2. **Creation Mode Selection**
+   - **[0] Localhost**: Development mode with local database creation
+   - **[1] FastPanel**: Production mode with FastPanel integration
+
+3. **Database User Configuration** (FastPanel mode)
+   - **[0] No MySQL user needed**: Database only
+   - **[1] Use existing MySQL user**: Select from FastPanel users *(Default)*
+   - **[2] Create new MySQL user**: Generate new user
+
+4. **Automatic Setup**
+   - Database creation with proper privileges
+   - Migration execution
+   - Seeder execution (optional)
+   - FastPanel integration (if selected)
+
+### Database Naming Features
+
+#### **Auto-Generated Names**
+- Format: `tenant_[UUID]` (e.g., `tenant_1a2b3c4d5e6f7g8h`)
+- Unique and collision-free
+- Follows `TENANT_DB_PREFIX` configuration
+
+#### **Custom Names with Prefix**
+- Input: `mycompany` → Database: `tenant_mycompany`
+- Automatic prefix application from `TENANT_DB_PREFIX`
+- Input validation and sanitization
+- Prevents duplicate names
+
+#### **Environment Integration**
+```env
+TENANT_DB_PREFIX=tenant_        # Applied to custom names
+TENANT_DB_CHARSET=utf8mb4       # Database charset
+TENANT_DB_COLLATION=utf8mb4_unicode_ci  # Database collation
+```
+
+### FastPanel Mode Features
+
+#### **Automatic Privilege Management**
+- Detects ENV root credentials automatically
+- Grants MySQL privileges to selected database users
+- Ensures phpMyAdmin auto-login compatibility
+- Creates proper database-user mappings
+
+#### **User Selection Options**
+```
+Select database user for assignment:
+[skip] ⏭️  Skip database user assignment
+[0   ] al_emaan_pk (ID: 15) - Owner: 1
+[1   ] cafe_artflow (ID: 7) - Owner: 1
+[2   ] dbadmin (ID: 1) - Owner: 2
+```
+
+#### **Smart Defaults**
+- ENV root credentials prioritized automatically
+- Existing users selected by default
+- Clear labeling with owner information
+- Fallback options for all scenarios
+
+### Command Line Options
+
+#### **Create with Options**
+```bash
+php artisan tenant:create \
+  --name="My Company" \
+  --domain="mycompany.example.com" \
+  --database="custom_db" \
+  --homepage \
+  --notes="Production tenant for My Company"
+```
+
+#### **Batch Creation**
+```bash
+# Create multiple test tenants
+php artisan tenancy:create-test-tenants
+
+# Create tenant with specific configuration
+php artisan tenant:create --force --name="Test" --domain="test.local"
 ```
 
 ## 🏠 Homepage Management
@@ -308,6 +434,16 @@ php artisan tenancy:test-performance
 - ✅ **Debug dashboard** with real-time debugging
 - ✅ **Load testing tools** built-in
 - ✅ **Minimal app pollution** - configs stay in package
+
+#### **🖥️ FastPanel Integration**
+- ✅ **Automatic database creation** - Seamless FastPanel CLI integration
+- ✅ **Database user assignment** - Automatic MySQL user mapping
+- ✅ **Privilege management** - Auto-grant database access permissions
+- ✅ **Panel owner assignment** - Link databases to FastPanel users
+- ✅ **phpMyAdmin compatibility** - Full auto-login support
+- ✅ **ENV root credential detection** - Automatic privilege escalation
+- ✅ **Smart user selection** - Default to existing users with fallback options
+- ✅ **Database prefix support** - Respects `TENANT_DB_PREFIX` configuration
 
 ---
 

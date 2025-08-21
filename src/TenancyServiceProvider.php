@@ -85,6 +85,8 @@ class TenancyServiceProvider extends ServiceProvider
             $fallback = [
                 // Core tenant commands
                 \ArtflowStudio\Tenancy\Commands\Core\CreateTenantCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Core\DeleteTenantCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Core\SyncFastPanelDatabaseCommand::class,
 
                 // Tenancy group
                 \ArtflowStudio\Tenancy\Commands\Tenancy\InstallTenancyCommand::class,
@@ -110,6 +112,12 @@ class TenancyServiceProvider extends ServiceProvider
                 \ArtflowStudio\Tenancy\Commands\Testing\TestPerformanceCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Testing\QuickInstallTestCommand::class,
                 \ArtflowStudio\Tenancy\Commands\Testing\ServerCompatibilityCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\TestRedisCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\RedisStressTestCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\ConfigureRedisCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\InstallRedisCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\EnableRedisCommand::class,
+                \ArtflowStudio\Tenancy\Commands\Testing\FixTenantDatabasesCommand::class,
                 
                 // Integration validation
                 \ArtflowStudio\Tenancy\Console\Commands\ValidateIntegrationsCommand::class,
@@ -126,6 +134,7 @@ class TenancyServiceProvider extends ServiceProvider
         $this->registerMiddleware();
         $this->configureLivewire();
         $this->registerAdminFeatures();
+        $this->configureRedisIfAvailable();
     }
 
     protected function registerAdminFeatures(): void
@@ -185,6 +194,8 @@ class TenancyServiceProvider extends ServiceProvider
         // Register our services
         $this->app->singleton(TenantService::class);
         $this->app->singleton(TenantContextCache::class);
+        $this->app->singleton(\ArtflowStudio\Tenancy\Services\RedisHelper::class);
+        $this->app->singleton(\ArtflowStudio\Tenancy\Services\TenancyCacheManager::class);
 
         // Register our event service provider
         $this->app->register(\ArtflowStudio\Tenancy\Providers\EventServiceProvider::class);
@@ -290,6 +301,21 @@ class TenancyServiceProvider extends ServiceProvider
                 // Note: nothing additional required here for now, but keep hook
                 // to align with previous behavior.
             });
+        }
+    }
+
+    /**
+     * Configure Redis automatically if available
+     */
+    protected function configureRedisIfAvailable(): void
+    {
+        try {
+            // Automatically configure cache driver based on Redis availability
+            if (class_exists(\ArtflowStudio\Tenancy\Services\TenancyCacheManager::class)) {
+                \ArtflowStudio\Tenancy\Services\TenancyCacheManager::configureCacheDriver();
+            }
+        } catch (\Throwable $e) {
+            // Silently ignore Redis configuration errors during bootstrap
         }
     }
 }

@@ -4,6 +4,7 @@ namespace ArtflowStudio\Tenancy\Commands\Testing;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
+use ArtflowStudio\Tenancy\Services\RedisHelper;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Arr;
 use ArtflowStudio\Tenancy\Models\Tenant;
@@ -110,15 +111,25 @@ class TestRedisCommand extends Command
     protected function isRedisAvailable(): bool
     {
         try {
-            if (config('cache.default') !== 'redis' && config('database.redis.default') === null) {
+            // Use RedisHelper if available
+            if (class_exists(RedisHelper::class)) {
+                return RedisHelper::isAvailable();
+            }
+
+            // Fallback to direct check
+            if (!extension_loaded('redis')) {
                 return false;
             }
 
-            // Use facade; it will throw if not available
+            // Test Redis connection using Laravel's Redis facade
             $conn = Redis::connection();
             $pong = $conn->ping();
-            return is_string($pong) || $pong === '+PONG' || $pong === 'PONG' || $pong === 1 || $pong === 0;
+            
+            // Check for valid ping response
+            return $pong === '+PONG' || $pong === 'PONG' || $pong === 1 || $pong === true;
         } catch (\Throwable $e) {
+            // Log the error for debugging
+            $this->line("   Redis connection error: {$e->getMessage()}");
             return false;
         }
     }
