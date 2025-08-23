@@ -1,104 +1,119 @@
-# 📋 Documentation Index
+# AF-MultiTenancy Documentation
 
-**ArtFlow Studio Tenancy Package v2.0**
+**Complete Laravel Multi-Tenancy Solution built on stancl/tenancy**
 
-This directory contains comprehensive documentation for all package features and functionality.
+## 📚 Documentation Structure
 
-## 📚 Documentation Files
+### 🚀 Getting Started
+- **[Installation Guide](installation/INSTALLATION_GUIDE.md)** - Complete setup instructions
+- **[Installation Troubleshooting](installation/INSTALLATION_TROUBLESHOOTING.md)** - Common setup issues
+- **[Quick Reference](guides/DEVELOPER_QUICK_REFERENCE.md)** - Developer quick start
 
-### Core Documentation
-- **[README.md](../README.md)** - Main package overview and quick start guide
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture and design patterns  
-- **[FEATURES.md](FEATURES.md)** - Complete feature overview and capabilities
-- **[INSTALLATION.md](INSTALLATION.md)** - Detailed installation and setup guide
+### ✨ Features
+- **[Complete Features Guide](features/COMPLETE_FEATURES_GUIDE.md)** - All package features
+- **[Feature Overview](features/FEATURES.md)** - Feature summary
+- **[Redis Integration](features/REDIS.md)** - Caching and performance
 
-### API & CLI Reference
-- **[API.md](API.md)** - Complete REST API documentation
-- **[COMMANDS.md](COMMANDS.md)** - All CLI commands with examples
-- **[TODO.md](TODO.md)** - Development roadmap and future plans
+### 📖 Guides
+- **[Integration Guide](guides/COMPLETE_INTEGRATION_GUIDE.md)** - Complete setup walkthrough
+- **[Central Domain Guide](guides/CENTRAL_DOMAIN_GUIDE.md)** - Managing central domains
+- **[Middleware Guide](guides/MIDDLEWARE_USAGE_GUIDE.md)** - Middleware configuration
+- **[Middleware Reference](guides/MIDDLEWARE_QUICK_REFERENCE.md)** - Quick middleware setup
 
-### Specialized Guides
-- **[CENTRAL_DOMAIN_GUIDE.md](CENTRAL_DOMAIN_GUIDE.md)** - Central domain setup guide
-- **[INSTALLATION_TROUBLESHOOTING.md](INSTALLATION_TROUBLESHOOTING.md)** - Common issues and solutions
+### 🔌 API Reference
+- **[API Documentation](api/API.md)** - REST API endpoints
+- **[Commands Reference](api/COMMANDS.md)** - CLI commands
 
----
+### 🛠 Development
+- **[Architecture](development/ARCHITECTURE.md)** - System architecture
+- **[TODO & Roadmap](development/TODO.md)** - Planned features
 
-## 🚀 Quick Navigation
+## 🎯 Quick Navigation
 
 ### For New Users
-1. Start with [README.md](../README.md) for overview
-2. Follow [INSTALLATION.md](INSTALLATION.md) for setup
-3. Review [FEATURES.md](FEATURES.md) for capabilities
+1. Start with [Installation Guide](installation/INSTALLATION_GUIDE.md)
+2. Read [Complete Features Guide](features/COMPLETE_FEATURES_GUIDE.md)
+3. Follow [Integration Guide](guides/COMPLETE_INTEGRATION_GUIDE.md)
 
 ### For Developers
-1. Read [ARCHITECTURE.md](ARCHITECTURE.md) for technical details
-2. Use [API.md](API.md) for API integration
-3. Reference [COMMANDS.md](COMMANDS.md) for CLI usage
+1. Check [Developer Quick Reference](guides/DEVELOPER_QUICK_REFERENCE.md)
+2. Review [Middleware Guide](guides/MIDDLEWARE_USAGE_GUIDE.md)
+3. Explore [API Documentation](api/API.md)
 
-### For Contributors
-1. Check [TODO.md](TODO.md) for development roadmap
-2. Review [ARCHITECTURE.md](ARCHITECTURE.md) for patterns
-3. Follow contribution guidelines in main README
+### For System Administrators
+1. Review [Architecture](development/ARCHITECTURE.md)
+2. Configure [Redis Integration](features/REDIS.md)
+3. Check [Commands Reference](api/COMMANDS.md)
 
----
+## 🔧 Universal Middleware
 
-## 📊 Documentation Status
+This package uses **Universal Middleware** that works for both central and tenant contexts:
 
-### ✅ Updated for v2.0
-- [x] README.md - Main package documentation
-- [x] ARCHITECTURE.md - Technical architecture
-- [x] FEATURES.md - Feature documentation
-- [x] API.md - REST API reference
-- [x] COMMANDS.md - CLI command reference
-- [x] TODO.md - Development roadmap
+```php
+// For web routes (both central and tenant)
+Route::middleware(['universal.web'])->group(function () {
+    // Your routes here
+});
 
-### 📝 Legacy Files (For Reference Only)
-The following files contain outdated version information but are kept for historical reference:
-- `INSTALLATION_TROUBLESHOOTING.md` - Some troubleshooting info still relevant
-- `CENTRAL_DOMAIN_GUIDE.md` - Basic central domain setup (mostly current)
-
----
-
-## 🏗️ Package Structure
-
-```
-artflow-studio/tenancy/
-├── README.md                    # 📖 Main documentation
-├── docs/                        # 📁 Complete documentation
-│   ├── ARCHITECTURE.md          # 🏗️ Technical architecture  
-│   ├── API.md                   # 🔌 REST API reference
-│   ├── COMMANDS.md              # 🛠️ CLI commands guide
-│   ├── FEATURES.md              # ✨ Feature overview
-│   ├── INSTALLATION.md          # ⚙️ Setup guide
-│   ├── TODO.md                  # 📋 Development roadmap
-│   └── INDEX.md                 # 📚 This file
-├── src/                         # 💻 Source code
-├── config/                      # ⚙️ Configuration files  
-├── database/                    # 🗄️ Migrations
-├── resources/                   # 🎨 Views and assets
-└── routes/                      # 🛤️ Package routes
+// For authenticated routes (both central and tenant) 
+Route::middleware(['universal.auth'])->group(function () {
+    // Protected routes here
+});
 ```
 
+The universal middleware automatically:
+- ✅ Identifies tenant context
+- ✅ Initializes proper database connections
+- ✅ Handles authentication for both central and tenant users
+- ✅ Manages session scoping
+- ✅ Provides maintenance mode support
+
+## 🚀 Key Features
+
+- **🔍 Cached Tenant Lookup** - Fast tenant resolution with Redis
+- **🔧 Maintenance Mode** - Per-tenant maintenance with IP whitelisting
+- **⚡ Early Identification** - Multi-strategy tenant identification
+- **🔐 Sanctum Integration** - Tenant-aware API authentication
+- **📊 Real-time Monitoring** - Performance metrics and health checks
+- **🛠 30+ CLI Commands** - Comprehensive management tools
+- **🌐 REST API** - Full-featured tenant management API
+- **📱 Livewire 3 Ready** - Complete Livewire integration
+
+## 🧪 Testing
+
+Run comprehensive tests:
+```bash
+# Test all features
+php artisan tenancy:test-comprehensive --verbose
+
+# Test specific features
+php artisan tenancy:test-cached-lookup
+php artisan tenancy:test-sanctum
+```
+
+## 📋 Quick Commands
+
+```bash
+# Create tenant
+php artisan tenant:create example.com
+
+# Maintenance mode
+php artisan tenants:maintenance enable --tenant=example
+
+# Database operations
+php artisan tenant:db migrate --tenant=example
+
+# Performance testing
+php artisan tenancy:test-comprehensive --performance
+```
+
+## 🆘 Need Help?
+
+1. Check [Installation Troubleshooting](installation/INSTALLATION_TROUBLESHOOTING.md)
+2. Review [Developer Quick Reference](guides/DEVELOPER_QUICK_REFERENCE.md)  
+3. Run diagnostic commands with `--verbose` flag
+4. Check the [TODO & Roadmap](development/TODO.md) for known issues
+
 ---
 
-## 📖 Documentation Guidelines
-
-### For Contributors
-
-When updating documentation:
-1. **Keep current** - Always reflect actual code functionality
-2. **Be comprehensive** - Include examples and edge cases
-3. **Stay consistent** - Follow existing formatting and style
-4. **Test examples** - Ensure all code examples work
-5. **Update version info** - Remove outdated version references
-
-### Formatting Standards
-- Use clear headers with emoji for visual organization
-- Include code examples for all features
-- Provide both basic and advanced usage examples
-- Keep examples up-to-date with current API
-- Use consistent terminology throughout
-
----
-
-This documentation provides complete coverage of all package functionality with practical examples and detailed technical information.
+**Version:** 1.0.0 | **Laravel:** 10+ | **PHP:** 8.1+ | **Built on:** stancl/tenancy v3

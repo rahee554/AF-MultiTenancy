@@ -4,148 +4,201 @@ namespace ArtflowStudio\Tenancy\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use Symfony\Component\HttpFoundation\Response;
+use Stancl\Tenancy\Tenancy;
+use Stancl\Tenancy\Resolvers\DomainTenantResolver;
+use ArtflowStudio\Tenancy\Services\TenantService;
 
-/**
- * Smart Domain Resolver Middleware
- * 
- * This middleware intelligently detects whether the current domain is a central domain
- * or a tenant domain, then applies the appropriate tenancy context automatically.
- * 
- * This allows the same routes (like /login, /dashboard) to work on both:
- * - Central domains (localhost, admin.yoursite.com) → No tenant context
- * - Tenant domains (tenant1.yoursite.com, tenant2.yoursite.com) → Tenant context
- * 
- * Usage: Route::middleware(['central.tenant.web'])
- */
 class SmartDomainResolverMiddleware
 {
-    /**
-     * Handle an incoming request with smart domain detection.
-     */
-    public function handle(Request $request, Closure $next): Response
+    protected $tenantService;
+    protected $tenancy;
+
+    public function __construct(TenantService $tenantService, Tenancy $tenancy)
     {
-        $currentDomain = $request->getHost();
-        $centralDomains = $this->getCentralDomains();
-        
-        // Determine if this is a central or tenant domain
-        $isCentralDomain = in_array($currentDomain, $centralDomains);
-        
-        if ($isCentralDomain) {
-            // CENTRAL DOMAIN FLOW
-            return $this->handleCentralDomain($request, $next);
-        } else {
-            // TENANT DOMAIN FLOW  
-            return $this->handleTenantDomain($request, $next);
-        }
+        $this->tenantService = $tenantService;
+        $this->tenancy = $tenancy;
     }
-    
+
     /**
-     * Handle request for central domains
+     * Handle an incoming request with smart domain resolution
+     * Priority: 1. Try tenant domain, 2. Fall back to central
      */
-    protected function handleCentralDomain(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next)
     {
-        // Ensure no tenant context is active
-        if (app()->bound('tenant')) {
-            app()->forgetInstance('tenant');
-        }
+        $domain = $request->getHost();
         
-        // Add central domain markers
-        $request->attributes->set('domain_type', 'central');
-        $request->attributes->set('is_central', true);
-        $request->attributes->set('is_tenant', false);
-        
-        // Log central domain access
-        Log::info('Central domain access detected', [
-            'domain' => $request->getHost(),
-            'path' => $request->path(),
-            'method' => $request->method(),
-            'ip' => $request->ip(),
-        ]);
-        
-        // Share central context with views
-        view()->share([
-            'domainType' => 'central',
-            'isCentral' => true,
-            'isTenant' => false,
-            'currentTenant' => null,
-        ]);
-        
-        return $next($request);
-    }
-    
-    /**
-     * Handle request for tenant domains with full tenancy initialization
-     */
-    protected function handleTenantDomain(Request $request, Closure $next): Response
-    {
-        // Initialize tenancy by domain (stancl/tenancy)
-        $initializeTenancy = new \Stancl\Tenancy\Middleware\InitializeTenancyByDomain();
-        
-        return $initializeTenancy->handle($request, function ($request) use ($next) {
-            // Prevent access from central domains (stancl/tenancy)
-            $preventCentral = new \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains();
+        Log::debug('SmartDomainResolver: Processing domain', ['domain' => $domain]);
+
+        // Step 1: Try to resolve as tenant domain first
+        if ($this->attemptTenantResolution($request, $domain)) {
+            Log::info('SmartDomainResolver: Resolved as tenant domain', [
+                'domain' => $domain,
+                'tenant_id' => tenant('id') ?? 'unknown'
+            ]);
             
-            return $preventCentral->handle($request, function ($request) use ($next) {
-                // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
-                $scopeSessions = new \Stancl\Tenancy\Middleware\ScopeSessions();
-                
-                return $scopeSessions->handle($request, function ($request) use ($next) {
-                    // Apply our tenant enhancements
-                    $tenantEnhancements = new \ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware();
-                    
-                    return $tenantEnhancements->handle($request, function ($request) use ($next) {
-                        // Get current tenant after initialization
-                        $currentTenant = tenant();
-                        
-                        // Add tenant domain markers
-                        $request->attributes->set('domain_type', 'tenant');
-                        $request->attributes->set('is_central', false);
-                        $request->attributes->set('is_tenant', true);
-                        $request->attributes->set('tenant', $currentTenant);
-                        
-                        // Log tenant domain access
-                        Log::info('Tenant domain access detected', [
-                            'domain' => $request->getHost(),
-                            'tenant_id' => $currentTenant ? $currentTenant->id : null,
-                            'path' => $request->path(),
-                            'method' => $request->method(),
-                            'ip' => $request->ip(),
-                        ]);
-                        
-                        // Share tenant context with views
-                        view()->share([
-                            'domainType' => 'tenant',
-                            'isCentral' => false,
-                            'isTenant' => true,
-                            'currentTenant' => $currentTenant,
-                        ]);
-                        
-                        return $next($request);
-                    });
-                });
-            });
-        });
+            // Apply tenant context middleware chain
+            return $this->applyTenantMiddleware($request, $next);
+        }
+
+        // Step 2: Check if it's a central domain
+        if ($this->isCentralDomain($domain)) {
+            Log::info('SmartDomainResolver: Resolved as central domain', ['domain' => $domain]);
+            
+            // Ensure no tenant context is active
+            $this->ensureCentralContext();
+            
+            return $next($request);
+        }
+
+        // Step 3: Domain not found in either context
+        Log::warning('SmartDomainResolver: Domain not found in tenant or central config', [
+            'domain' => $domain,
+            'request_uri' => $request->getRequestUri()
+        ]);
+
+        // Return 404 or redirect based on configuration
+        return $this->handleUnknownDomain($request);
     }
-    
+
     /**
-     * Get list of central domains from configuration
+     * Attempt to resolve domain as tenant
      */
-    protected function getCentralDomains(): array
+    protected function attemptTenantResolution(Request $request, string $domain): bool
     {
-        $centralDomains = config('tenancy.central_domains', ['localhost', '127.0.0.1']);
+        try {
+            // Use cache to avoid repeated database queries
+            $cacheKey = "tenant_domain:{$domain}";
+            
+            return Cache::remember($cacheKey, 300, function () use ($domain) {
+                $resolver = app(DomainTenantResolver::class);
+                
+                try {
+                    $tenant = $resolver->resolve($domain);
+                    return $tenant !== null;
+                } catch (\Exception $e) {
+                    Log::debug('SmartDomainResolver: Tenant resolution failed', [
+                        'domain' => $domain,
+                        'error' => $e->getMessage()
+                    ]);
+                    return false;
+                }
+            });
+        } catch (\Exception $e) {
+            Log::error('SmartDomainResolver: Error during tenant resolution', [
+                'domain' => $domain,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Apply tenant middleware chain
+     */
+    protected function applyTenantMiddleware(Request $request, Closure $next)
+    {
+        // Initialize tenancy using stancl/tenancy bootstrappers
+        try {
+            // The tenant should already be identified by the resolver
+            // Just ensure bootstrappers are run
+            $this->tenancy->initialize(tenant());
+            
+            // Apply session scoping if this is a web request
+            if ($request->hasSession()) {
+                $this->scopeSession($request);
+            }
+            
+            return $next($request);
+        } catch (\Exception $e) {
+            Log::error('SmartDomainResolver: Error applying tenant middleware', [
+                'domain' => $request->getHost(),
+                'error' => $e->getMessage()
+            ]);
+            
+            // Fall back to central context
+            $this->ensureCentralContext();
+            return $next($request);
+        }
+    }
+
+    /**
+     * Check if domain is configured as central
+     */
+    protected function isCentralDomain(string $domain): bool
+    {
+        $centralDomains = config('artflow-tenancy.central_domains', []);
         
-        // Add APP_DOMAIN to central domains if set
-        $appDomain = config('app.domain') ?? env('APP_DOMAIN');
-        if ($appDomain && !in_array($appDomain, $centralDomains)) {
-            $centralDomains[] = $appDomain;
+        // Check exact match
+        if (in_array($domain, $centralDomains)) {
+            return true;
         }
         
-        // Add any additional central domains from our config
-        $additionalCentral = config('artflow-tenancy.additional_central_domains', []);
-        $centralDomains = array_merge($centralDomains, $additionalCentral);
+        // Check wildcard patterns
+        foreach ($centralDomains as $pattern) {
+            if (str_contains($pattern, '*')) {
+                $regex = str_replace('*', '.*', preg_quote($pattern, '/'));
+                if (preg_match("/^{$regex}$/", $domain)) {
+                    return true;
+                }
+            }
+        }
         
-        return array_unique($centralDomains);
+        return false;
+    }
+
+    /**
+     * Ensure central context (no tenant active)
+     */
+    protected function ensureCentralContext(): void
+    {
+        if ($this->tenancy->initialized) {
+            $this->tenancy->end();
+        }
+    }
+
+    /**
+     * Scope session for tenant
+     */
+    protected function scopeSession(Request $request): void
+    {
+        if (tenant() && $request->hasSession()) {
+            $session = $request->session();
+            $tenantId = tenant('id');
+            
+            // Apply tenant-specific session configuration
+            $sessionName = config('session.cookie') . '_tenant_' . $tenantId;
+            config(['session.cookie' => $sessionName]);
+            
+            // Regenerate session ID with tenant scope
+            if (!$session->has('_tenant_scoped')) {
+                $session->put('_tenant_scoped', true);
+                $session->put('_tenant_id', $tenantId);
+            }
+        }
+    }
+
+    /**
+     * Handle unknown domain
+     */
+    protected function handleUnknownDomain(Request $request)
+    {
+        $defaultAction = config('artflow-tenancy.unknown_domain_action', '404');
+        
+        switch ($defaultAction) {
+            case 'redirect':
+                $redirectUrl = config('artflow-tenancy.unknown_domain_redirect', '/');
+                return redirect($redirectUrl);
+                
+            case 'central':
+                Log::info('SmartDomainResolver: Unknown domain redirected to central context');
+                $this->ensureCentralContext();
+                return $next($request);
+                
+            default:
+                abort(404, 'Domain not found');
+        }
     }
 }

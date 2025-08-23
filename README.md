@@ -6,31 +6,9 @@
 
 **Enterprise-grade Laravel multi-tenancy built on top of stancl/tenancy**
 
-🚀 **Enhanced Multi-Tenancy** - Extends `stancl/tenancy` with status management, homepage functionality, enhanced CLI commands, and full Livewire compatibility.
+🚀 **Enhanced Multi-Tenancy** - Extends `stancl/tenancy` with advanced features, enhanced CLI commands, performance monitoring, and universal routing capabilities.
 
-## ✨ Key Features
-
-### Core Features
-- 🏢 **Complete Database Isolation** - Each tenant gets its own database with 100% success rate
-- 🧠 **Smart Middleware** - Asset-aware tenancy that doesn't interfere with CSS/JS/images
-- 🏠 **Homepage Management** - Enable/disable tenant homepages with smart redirection
-- 🌐 **Intelligent Domain Resolution** - Automatic routing between central and tenant domains
-- 🗄️ **Custom Database Names** - User-defined database names with validation
-
-### Performance & Monitoring
-- 📊 **Real-time Monitoring** - Built-in performance metrics and health checks
-- ⚡ **High Performance** - Optimized for 1000+ concurrent tenants (18ms avg response)
-- 🧪 **Comprehensive Testing Suite** - 5 specialized testing commands with progress tracking
-- � **Stress Testing** - High-intensity load testing for production readiness
-- 🔍 **System Validation** - Automated health checks and repair tools
-
-### Developer Experience
-- 🔧 **Zero Configuration** - Works out of the box with sensible defaults
-- 📱 **Complete REST API** - Full tenant management via API
-- ⚡ **One-Command Setup** - Install everything with a single command
-- 📚 **Comprehensive Documentation** - Detailed guides and troubleshooting
-
-## 🚀 Quick Start
+## ⚡ Quick Start
 
 ### Installation
 
@@ -48,44 +26,15 @@ php artisan af-tenancy:test-all
 php artisan tenant:manage create
 ```
 
-### 🔐 Database Root Configuration (Required)
-
-For automatic tenant database creation, you need MySQL root credentials:
-
-**Option 1: Environment Variables (Recommended)**
-```bash
-# Add to your .env file
-DB_ROOT_USERNAME=root
-DB_ROOT_PASSWORD=your_mysql_root_password
-```
-
-**Option 2: Grant Privileges to App User**
-```sql
-GRANT CREATE ON *.* TO 'your_app_user'@'localhost';
-FLUSH PRIVILEGES;
-```
-
-**Why Root Credentials?**
-- Creates tenant databases automatically
-- Grants proper MySQL privileges
-- Enables FastPanel integration
-- Ensures phpMyAdmin access
-
-**Security Notes:**
-- Root credentials are used temporarily during creation only
-- All database credentials are encrypted when stored
-- System follows principle of least privilege access
-
-### Basic Usage in Routes
+### Basic Usage
 
 ```php
 // routes/web.php
 
-// Central domain routes (your main app)
+// Central domain routes (your main app/admin)
 Route::middleware(['central.web'])->group(function () {
-    Route::get('/', function () {
-        return view('welcome');
-    });
+    Route::get('/', [HomeController::class, 'index']);
+    Route::get('admin', [AdminController::class, 'index']);
 });
 
 // Tenant routes (uses stancl/tenancy + our enhancements)
@@ -96,9 +45,134 @@ Route::middleware(['tenant.web'])->group(function () {
     });
     
     // Your tenant-specific routes here
-    require base_path('routes/tenant.php');
+    Route::resource('posts', PostController::class);
+});
+
+// Universal routes (work on both central and tenant domains)
+Route::middleware(['universal.web'])->group(function () {
+    Route::get('about', [AboutController::class, 'index']);
+    Route::get('contact', [ContactController::class, 'index']);
 });
 ```
+
+## ✨ Key Features
+
+## ✨ Key Features
+
+### Core Features (Built on stancl/tenancy)
+- 🏢 **Complete Database Isolation** - Each tenant gets its own database using stancl/tenancy
+- 🧠 **Universal Middleware** - Routes that work on both central and tenant domains
+- 🏠 **Homepage Management** - Enable/disable tenant homepages with smart redirection
+- 🌐 **Enhanced Domain Resolution** - Built on stancl/tenancy's domain resolver
+- 🗄️ **Custom Database Names** - User-defined database names with validation
+
+### Performance & Monitoring
+- 📊 **Real-time Monitoring** - Built-in performance metrics and health checks
+- ⚡ **High Performance** - Optimized for 1000+ concurrent tenants (18ms avg response)
+- 🧪 **Comprehensive Testing Suite** - 15+ specialized testing commands with progress tracking
+- 🔥 **Stress Testing** - High-intensity load testing for production readiness
+- 🔍 **System Validation** - Automated health checks and repair tools
+
+### Developer Experience
+- 🔧 **Zero Configuration** - Works out of the box with sensible defaults
+- 📱 **Complete REST API** - Full tenant management via API
+- ⚡ **One-Command Setup** - Install everything with `php artisan af-tenancy:install`
+- 📚 **Comprehensive Documentation** - Detailed guides and troubleshooting
+
+##  Database Root Configuration
+
+For automatic tenant database creation, you need MySQL root credentials:
+
+```bash
+# Add to your .env file
+DB_ROOT_USERNAME=root
+DB_ROOT_PASSWORD=your_mysql_root_password
+```
+
+**Why Root Credentials?**
+- Creates tenant databases automatically using stancl/tenancy
+- Grants proper MySQL privileges
+- Enables FastPanel integration
+- Ensures phpMyAdmin access
+
+## 📚 Documentation
+
+All documentation is organized in the `docs/` folder:
+
+- **[Installation Guide](docs/installation/)** - Complete setup instructions
+- **[Features](docs/features/)** - API, commands, Redis, and more
+- **[Usage Guides](docs/guides/)** - Architecture, middleware, domain resolver
+- **[API Documentation](docs/api/)** - REST API reference
+- **[Development](docs/development/)** - Testing, changelog, contributing
+
+### Quick Links
+- [Installation Guide](docs/installation/INSTALLATION_GUIDE.md)
+- [Middleware Usage](docs/guides/MIDDLEWARE_USAGE_GUIDE.md)
+- [Command Reference](docs/features/COMMANDS.md)
+- [API Documentation](docs/api/API.md)
+
+## 🛠️ Available Commands
+
+### Installation & Setup
+```bash
+php artisan af-tenancy:install          # Install and configure everything
+php artisan af-tenancy:test-all         # Test your complete setup  
+php artisan af-tenancy:check-routes     # Verify route configuration
+```
+
+### Tenant Management
+```bash
+php artisan tenant:manage create        # Create new tenant (interactive)
+php artisan tenant:manage list          # List all tenants
+php artisan tenant:manage status        # Show tenant status
+php artisan tenant:manage health        # Health check for tenants
+```
+
+### Testing & Debugging
+```bash
+php artisan af-tenancy:test-database    # Test database connections
+php artisan af-tenancy:test-auth        # Test authentication flow
+php artisan af-tenancy:test-middleware  # Test middleware functionality
+php artisan af-tenancy:debug-connection # Debug specific domain
+```
+
+### Performance & Monitoring
+```bash
+php artisan tenancy:health              # System health check
+php artisan tenancy:test-redis          # Test Redis configuration
+php artisan af-tenancy:performance      # Performance benchmarks
+```
+
+## 🚀 Built on stancl/tenancy
+
+This package extends the excellent [stancl/tenancy](https://tenancyforlaravel.com/) package. We use all of stancl/tenancy's core features:
+
+- **Database Tenancy**: Each tenant gets its own database
+- **Domain Resolution**: Automatic tenant identification by domain
+- **Bootstrappers**: Full stancl/tenancy bootstrapper support
+- **Queue Isolation**: Tenant-aware job queuing
+- **Storage Isolation**: Tenant-specific file storage
+
+### What We Add
+- Enhanced CLI commands with progress tracking
+- Advanced Redis multi-database support
+- Performance monitoring and testing tools
+- Universal routing capabilities
+- Homepage management features
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see our [Contributing Guide](docs/development/CONTRIBUTING.md) for details.
+
+## 📄 License
+
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+
+## 🔗 Links
+
+- [stancl/tenancy Documentation](https://tenancyforlaravel.com/)
+- [Laravel Documentation](https://laravel.com/docs)
+- [Package Documentation](docs/)
 
 # Homepage Management
 TENANT_HOMEPAGE_ENABLED=true

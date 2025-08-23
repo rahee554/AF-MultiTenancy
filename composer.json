@@ -32,7 +32,8 @@
     "require": {
         "php": ">=8.0",
         "laravel/framework": ">=10.0",
-        "stancl/tenancy": ">=3.9.1"
+        "stancl/tenancy": ">=3.9.1",
+        "predis/predis": "*"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.0|^11.0",
