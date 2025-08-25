@@ -7,6 +7,7 @@ use ArtflowStudio\Tenancy\Services\TenantService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Stancl\Tenancy\Facades\Tenancy;
 
 class TenantDatabaseCommand extends Command
@@ -14,13 +15,18 @@ class TenantDatabaseCommand extends Command
     protected $signature = 'tenant:db
                             {operation? : Database operation (migrate, migrate:fresh, migrate:rollback, seed, migrate:status)}
                             {--tenant= : Tenant UUID or name}
+                            {--domain= : Tenant domain}
+                            {--database= : Tenant database name}
                             {--class= : Seeder class name for seeding}
                             {--step= : Number of steps to rollback}
                             {--force : Force operation without confirmation}
                             {--seed : Run seeders after migration}
                             {--all : Run operation for all active tenants}
                             {--status=active : Filter tenants by status}
-                            {--pretend : Show what would be migrated without executing}';
+                            {--pretend : Show what would be migrated without executing}
+                            {--show-details : Show detailed migration/seeder output}
+                            {--monitor : Monitor and compare database vs file system}
+                            {--sync-status : Show sync status between shared and tenant directories}';
 
     protected $description = 'Database operations for tenants (migrate, seed, rollback, etc.)';
 
@@ -46,7 +52,23 @@ class TenantDatabaseCommand extends Command
             'reset' => 'Rollback all migrations',
             'refresh' => 'Rollback and re-run migrations',
             'sync' => 'Sync migrations/seeders from shared to tenant directories',
+            'monitor' => 'Monitor database vs filesystem differences',
+            'sync-status' => 'Show sync status between directories',
+            'health-check' => 'Check tenant database health and integrity',
         ];
+
+        // Handle special monitoring operations
+        if ($this->option('monitor') || $operation === 'monitor') {
+            return $this->runMonitor();
+        }
+
+        if ($this->option('sync-status') || $operation === 'sync-status') {
+            return $this->runSyncStatus();
+        }
+
+        if ($operation === 'health-check') {
+            return $this->runHealthCheck();
+        }
 
         if (!$operation) {
             $this->displayWelcome($operations);
@@ -92,9 +114,28 @@ class TenantDatabaseCommand extends Command
      */
     private function selectTenant(): ?Tenant
     {
-        $tenantIdentifier = $this->option('tenant');
-        
-        if ($tenantIdentifier) {
+        // Try domain first if provided
+        if ($domain = $this->option('domain')) {
+            $tenant = $this->findTenantByDomain($domain);
+            if ($tenant) {
+                $this->displaySelectedTenant($tenant);
+                return $tenant;
+            }
+            $this->error("❌ Tenant not found for domain: {$domain}");
+        }
+
+        // Try database name if provided
+        if ($database = $this->option('database')) {
+            $tenant = $this->findTenantByDatabase($database);
+            if ($tenant) {
+                $this->displaySelectedTenant($tenant);
+                return $tenant;
+            }
+            $this->error("❌ Tenant not found for database: {$database}");
+        }
+
+        // Try tenant identifier (UUID or name) if provided
+        if ($tenantIdentifier = $this->option('tenant')) {
             // Try to find by UUID first, then by name
             $tenant = Tenant::where('id', $tenantIdentifier)->first();
             
@@ -113,6 +154,47 @@ class TenantDatabaseCommand extends Command
         }
 
         return $this->interactiveTenantSelection();
+    }
+
+    /**
+     * Find tenant by domain
+     */
+    private function findTenantByDomain(string $domain): ?Tenant
+    {
+        // Try exact match first
+        $tenant = Tenant::whereHas('domains', function ($query) use ($domain) {
+            $query->where('domain', $domain);
+        })->first();
+
+        if (!$tenant) {
+            // Try partial match
+            $tenant = Tenant::whereHas('domains', function ($query) use ($domain) {
+                $query->where('domain', 'LIKE', "%{$domain}%");
+            })->first();
+        }
+
+        return $tenant;
+    }
+
+    /**
+     * Find tenant by database name
+     */
+    private function findTenantByDatabase(string $database): ?Tenant
+    {
+        // Search by database field or generated database name
+        $tenant = Tenant::where('database', $database)->first();
+        
+        if (!$tenant) {
+            // Try searching tenants and check their generated database names
+            $tenants = Tenant::all();
+            foreach ($tenants as $t) {
+                if ($t->getDatabaseName() === $database) {
+                    return $t;
+                }
+            }
+        }
+
+        return $tenant;
     }
 
     /**
@@ -337,6 +419,9 @@ class TenantDatabaseCommand extends Command
 
         tenancy()->initialize($tenant);
 
+        // Capture before state for comparison
+        $beforeMigrations = $this->getMigrationStatus($tenantMigrationsPath);
+
         $exitCode = Artisan::call('migrate', [
             '--force' => true,
             '--pretend' => $this->option('pretend'),
@@ -344,7 +429,19 @@ class TenantDatabaseCommand extends Command
         ]);
 
         $output = Artisan::output();
-        $this->line($output);
+        
+        if ($this->option('show-details')) {
+            $this->line($output);
+        } else {
+            // Show only successful migrations
+            $this->showMigrationSummary($output);
+        }
+
+        // Show what changed if not pretend mode
+        if (!$this->option('pretend')) {
+            $afterMigrations = $this->getMigrationStatus($tenantMigrationsPath);
+            $this->showMigrationChanges($beforeMigrations, $afterMigrations);
+        }
 
         tenancy()->end();
 
@@ -837,6 +934,10 @@ class TenantDatabaseCommand extends Command
             'fresh-seed' => 'Fresh migrate + seed in one command',
             'reset' => 'Rollback all migrations',
             'refresh' => 'Rollback and re-run migrations',
+            'sync' => 'Sync migrations/seeders from shared to tenant directories',
+            'monitor' => 'Monitor database vs filesystem differences',
+            'sync-status' => 'Show sync status between directories',
+            'health-check' => 'Check tenant database health and integrity',
         ];
         
         foreach ($ops as $cmd => $desc) {
@@ -845,12 +946,562 @@ class TenantDatabaseCommand extends Command
 
         $this->newLine();
         $this->info("💡 Usage examples:");
+        $this->info("  <fg=yellow>Basic operations:</fg=yellow>");
         $this->info("  php artisan tenant:db migrate");
-        $this->info("  php artisan tenant:db seed --class=UserSeeder");
         $this->info("  php artisan tenant:db migrate:fresh --seed");
+        $this->info("  php artisan tenant:db seed --class=UserSeeder");
+        
+        $this->newLine();
+        $this->info("  <fg=yellow>Tenant selection options:</fg=yellow>");
+        $this->info("  php artisan tenant:db migrate --tenant=uuid-here");
+        $this->info("  php artisan tenant:db migrate --domain=example.com");
+        $this->info("  php artisan tenant:db migrate --database=tenant_db_name");
+        
+        $this->newLine();
+        $this->info("  <fg=yellow>Bulk operations:</fg=yellow>");
         $this->info("  php artisan tenant:db migrate --all");
-        $this->info("  php artisan tenant:db seed --tenant=tenant-uuid");
+        $this->info("  php artisan tenant:db seed --all --status=active");
+        
+        $this->newLine();
+        $this->info("  <fg=yellow>Monitoring & Status:</fg=yellow>");
+        $this->info("  php artisan tenant:db monitor");
+        $this->info("  php artisan tenant:db sync-status");
+        $this->info("  php artisan tenant:db health-check");
+        
+        $this->newLine();
+        $this->info("  <fg=yellow>Advanced options:</fg=yellow>");
+        $this->info("  php artisan tenant:db migrate --show-details");
+        $this->info("  php artisan tenant:db migrate:fresh --seed --force");
+        $this->info("  php artisan tenant:db migrate --pretend");
         
         return 1;
+    }
+
+    /**
+     * Get migration status for comparison
+     */
+    private function getMigrationStatus(string $path): array
+    {
+        try {
+            Artisan::call('migrate:status', ['--path' => $path]);
+            $output = Artisan::output();
+            
+            $migrations = [];
+            $lines = explode("\n", $output);
+            
+            foreach ($lines as $line) {
+                if (preg_match('/\|\s*(\w+)\s*\|\s*(.+)\s*\|/', $line, $matches)) {
+                    $status = trim($matches[1]);
+                    $migration = trim($matches[2]);
+                    $migrations[$migration] = $status;
+                }
+            }
+            
+            return $migrations;
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Show migration summary (only successful ones)
+     */
+    private function showMigrationSummary(string $output): void
+    {
+        $lines = explode("\n", $output);
+        $migrations = [];
+        
+        foreach ($lines as $line) {
+            if (str_contains($line, 'Migrating:') || str_contains($line, 'Migrated:')) {
+                $migrations[] = trim($line);
+            }
+        }
+        
+        if (!empty($migrations)) {
+            $this->info("📋 Migration Summary:");
+            foreach ($migrations as $migration) {
+                if (str_contains($migration, 'Migrated:')) {
+                    $this->line("  ✅ " . str_replace('Migrated:', '', $migration));
+                } else {
+                    $this->line("  🔄 " . str_replace('Migrating:', '', $migration));
+                }
+            }
+            $this->newLine();
+        }
+    }
+
+    /**
+     * Show changes between before and after migration states
+     */
+    private function showMigrationChanges(array $before, array $after): void
+    {
+        $changes = [];
+        
+        foreach ($after as $migration => $status) {
+            if (!isset($before[$migration]) || $before[$migration] !== $status) {
+                $changes[] = [
+                    'migration' => $migration,
+                    'before' => $before[$migration] ?? 'Not found',
+                    'after' => $status
+                ];
+            }
+        }
+        
+        if (!empty($changes)) {
+            $this->info("📊 Migration Status Changes:");
+            $headers = ['Migration', 'Before', 'After'];
+            $rows = array_map(function ($change) {
+                return [
+                    Str::limit($change['migration'], 50),
+                    $change['before'] === 'Not found' ? '🆕 New' : 
+                        ($change['before'] === 'Pending' ? '⏳ Pending' : '✅ ' . $change['before']),
+                    $change['after'] === 'Ran' ? '✅ Ran' : '⏳ ' . $change['after']
+                ];
+            }, $changes);
+            
+            $this->table($headers, $rows);
+        }
+    }
+
+    /**
+     * Monitor database vs filesystem differences
+     */
+    private function runMonitor(): int
+    {
+        $this->info("🔍 Monitoring tenant databases vs filesystem");
+        $this->newLine();
+
+        $tenants = Tenant::where('status', 'active')->get();
+        
+        if ($tenants->isEmpty()) {
+            $this->error("❌ No active tenants found");
+            return 1;
+        }
+
+        $issues = [];
+        $tenantMigrationsPath = config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant');
+        $tenantSeedersPath = config('artflow-tenancy.seeders.tenant_seeders_path', 'database/seeders/tenant');
+
+        // Get available files
+        $availableMigrations = $this->getAvailableFiles($tenantMigrationsPath, '*.php');
+        $availableSeeders = $this->getAvailableFiles($tenantSeedersPath, '*.php');
+
+        foreach ($tenants as $tenant) {
+            $this->info("🔍 Checking: {$tenant->name}");
+            
+            try {
+                tenancy()->initialize($tenant);
+                
+                // Check migrations
+                $runMigrations = $this->getRunMigrations();
+                $migrationIssues = $this->compareFiles($availableMigrations, $runMigrations, 'migrations');
+                
+                // Check seeders (approximate - we can't easily get exact seeder status)
+                $seederIssues = $this->checkSeederStatus($tenant, $availableSeeders);
+                
+                tenancy()->end();
+                
+                if (!empty($migrationIssues) || !empty($seederIssues)) {
+                    $issues[$tenant->name] = [
+                        'migrations' => $migrationIssues,
+                        'seeders' => $seederIssues
+                    ];
+                }
+                
+                $this->line("  ✅ Checked");
+                
+            } catch (\Exception $e) {
+                $issues[$tenant->name] = [
+                    'error' => $e->getMessage()
+                ];
+                $this->line("  ❌ Error: " . $e->getMessage());
+            }
+        }
+
+        $this->newLine();
+        $this->displayMonitorResults($issues);
+        
+        return empty($issues) ? 0 : 1;
+    }
+
+    /**
+     * Show sync status between directories
+     */
+    private function runSyncStatus(): int
+    {
+        $this->info("📊 Sync Status Between Shared and Tenant Directories");
+        $this->newLine();
+
+        $config = config('artflow-tenancy');
+        
+        $sharedMigrationsPath = base_path($config['migrations']['shared_migrations_path']);
+        $tenantMigrationsPath = base_path($config['migrations']['tenant_migrations_path']);
+        $sharedSeedersPath = base_path($config['seeders']['shared_seeders_path']);
+        $tenantSeedersPath = base_path($config['seeders']['tenant_seeders_path']);
+
+        // Check migrations sync status
+        $this->info("📁 Migration Sync Status:");
+        $migrationStatus = $this->comparDirectories($sharedMigrationsPath, $tenantMigrationsPath, 
+            $config['migrations']['skip_migrations'] ?? []);
+        $this->displaySyncStatus($migrationStatus, 'Migrations');
+
+        $this->newLine();
+
+        // Check seeders sync status
+        $this->info("🌱 Seeder Sync Status:");
+        $seederStatus = $this->comparDirectories($sharedSeedersPath, $tenantSeedersPath,
+            $config['seeders']['skip_seeders'] ?? []);
+        $this->displaySyncStatus($seederStatus, 'Seeders');
+
+        return 0;
+    }
+
+    /**
+     * Run health check for tenant databases
+     */
+    private function runHealthCheck(): int
+    {
+        $this->info("🏥 Tenant Database Health Check");
+        $this->newLine();
+
+        $tenants = Tenant::where('status', 'active')->get();
+        $healthReport = [];
+
+        foreach ($tenants as $tenant) {
+            $this->info("🔍 Checking: {$tenant->name}");
+            
+            $health = [
+                'connection' => false,
+                'migrations' => 'unknown',
+                'tables' => 0,
+                'size' => 'unknown',
+                'issues' => []
+            ];
+
+            try {
+                tenancy()->initialize($tenant);
+                
+                // Test connection
+                DB::connection()->getPdo();
+                $health['connection'] = true;
+                
+                // Check migration status
+                $health['migrations'] = $this->checkMigrationHealth();
+                
+                // Count tables
+                $tables = DB::select("SHOW TABLES");
+                $health['tables'] = count($tables);
+                
+                // Get database size
+                $dbName = $tenant->getDatabaseName();
+                $sizeResult = DB::select("
+                    SELECT ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
+                    FROM information_schema.tables 
+                    WHERE table_schema = ?
+                ", [$dbName]);
+                
+                $health['size'] = ($sizeResult[0]->size_mb ?? 0) . ' MB';
+                
+                tenancy()->end();
+                
+                $this->line("  ✅ Healthy");
+                
+            } catch (\Exception $e) {
+                $health['issues'][] = $e->getMessage();
+                $this->line("  ❌ Issues found");
+            }
+            
+            $healthReport[$tenant->name] = $health;
+        }
+
+        $this->newLine();
+        $this->displayHealthReport($healthReport);
+        
+        return 0;
+    }
+
+    /**
+     * Get available files in a directory
+     */
+    private function getAvailableFiles(string $path, string $pattern): array
+    {
+        if (!is_dir($path)) {
+            return [];
+        }
+        
+        $files = glob($path . '/' . $pattern);
+        return array_map('basename', $files);
+    }
+
+    /**
+     * Get run migrations from database
+     */
+    private function getRunMigrations(): array
+    {
+        try {
+            $migrations = DB::table('migrations')->pluck('migration')->toArray();
+            return array_map(function ($migration) {
+                return $migration . '.php';
+            }, $migrations);
+        } catch (\Exception $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Compare available files vs run files
+     */
+    private function compareFiles(array $available, array $run, string $type): array
+    {
+        $issues = [];
+        
+        // Files that exist but haven't been run
+        $pending = array_diff($available, $run);
+        if (!empty($pending)) {
+            $issues['pending'] = $pending;
+        }
+        
+        // Files that were run but no longer exist
+        $missing = array_diff($run, $available);
+        if (!empty($missing)) {
+            $issues['missing'] = $missing;
+        }
+        
+        return $issues;
+    }
+
+    /**
+     * Check seeder status for a tenant
+     */
+    private function checkSeederStatus(Tenant $tenant, array $availableSeeders): array
+    {
+        // This is approximate since we can't easily track seeder execution
+        // We'll check if common seeder tables exist and have data
+        $issues = [];
+        
+        try {
+            $tables = DB::select("SHOW TABLES");
+            $tableCount = count($tables);
+            
+            if ($tableCount === 0 && !empty($availableSeeders)) {
+                $issues['no_data'] = "Database is empty but " . count($availableSeeders) . " seeders are available";
+            }
+            
+            // Could add more sophisticated seeder checking here
+            
+        } catch (\Exception $e) {
+            $issues['error'] = $e->getMessage();
+        }
+        
+        return $issues;
+    }
+
+    /**
+     * Compare two directories
+     */
+    private function comparDirectories(string $sourcePath, string $targetPath, array $skipList): array
+    {
+        $status = [
+            'source_files' => 0,
+            'target_files' => 0,
+            'sync_needed' => [],
+            'up_to_date' => [],
+            'missing_in_target' => [],
+            'extra_in_target' => []
+        ];
+
+        if (!is_dir($sourcePath)) {
+            $status['error'] = "Source directory not found: {$sourcePath}";
+            return $status;
+        }
+
+        if (!is_dir($targetPath)) {
+            $status['error'] = "Target directory not found: {$targetPath}";
+            return $status;
+        }
+
+        $sourceFiles = array_diff(scandir($sourcePath), ['.', '..']);
+        $targetFiles = array_diff(scandir($targetPath), ['.', '..']);
+
+        $sourceFiles = array_filter($sourceFiles, fn($file) => pathinfo($file, PATHINFO_EXTENSION) === 'php');
+        $targetFiles = array_filter($targetFiles, fn($file) => pathinfo($file, PATHINFO_EXTENSION) === 'php');
+
+        $status['source_files'] = count($sourceFiles);
+        $status['target_files'] = count($targetFiles);
+
+        foreach ($sourceFiles as $file) {
+            // Check if should be skipped
+            $shouldSkip = false;
+            foreach ($skipList as $skipPattern) {
+                if (str_contains($file, $skipPattern)) {
+                    $shouldSkip = true;
+                    break;
+                }
+            }
+            
+            if ($shouldSkip) {
+                continue;
+            }
+
+            $sourceFile = $sourcePath . '/' . $file;
+            $targetFile = $targetPath . '/' . $file;
+
+            if (!file_exists($targetFile)) {
+                $status['missing_in_target'][] = $file;
+            } elseif (filemtime($sourceFile) > filemtime($targetFile)) {
+                $status['sync_needed'][] = $file;
+            } else {
+                $status['up_to_date'][] = $file;
+            }
+        }
+
+        // Files in target but not in source
+        $status['extra_in_target'] = array_diff($targetFiles, $sourceFiles);
+
+        return $status;
+    }
+
+    /**
+     * Display sync status results
+     */
+    private function displaySyncStatus(array $status, string $type): void
+    {
+        if (isset($status['error'])) {
+            $this->error("❌ {$status['error']}");
+            return;
+        }
+
+        $this->info("📊 {$type} Status:");
+        $this->info("   📁 Source files: {$status['source_files']}");
+        $this->info("   📂 Target files: {$status['target_files']}");
+
+        if (!empty($status['up_to_date'])) {
+            $this->info("   ✅ Up to date: " . count($status['up_to_date']));
+        }
+
+        if (!empty($status['sync_needed'])) {
+            $this->warn("   🔄 Need sync: " . count($status['sync_needed']));
+            foreach ($status['sync_needed'] as $file) {
+                $this->line("      - {$file}");
+            }
+        }
+
+        if (!empty($status['missing_in_target'])) {
+            $this->error("   ❌ Missing in target: " . count($status['missing_in_target']));
+            foreach ($status['missing_in_target'] as $file) {
+                $this->line("      - {$file}");
+            }
+        }
+
+        if (!empty($status['extra_in_target'])) {
+            $this->warn("   ⚠️  Extra in target: " . count($status['extra_in_target']));
+            foreach ($status['extra_in_target'] as $file) {
+                $this->line("      - {$file}");
+            }
+        }
+    }
+
+    /**
+     * Display monitor results
+     */
+    private function displayMonitorResults(array $issues): void
+    {
+        if (empty($issues)) {
+            $this->info("✅ All tenant databases are in sync with filesystem!");
+            return;
+        }
+
+        $this->warn("⚠️  Found issues in " . count($issues) . " tenant(s):");
+        
+        foreach ($issues as $tenantName => $tenantIssues) {
+            $this->newLine();
+            $this->info("🏢 Tenant: {$tenantName}");
+            
+            if (isset($tenantIssues['error'])) {
+                $this->error("   ❌ Error: {$tenantIssues['error']}");
+                continue;
+            }
+            
+            if (!empty($tenantIssues['migrations'])) {
+                $this->warn("   📁 Migration Issues:");
+                foreach ($tenantIssues['migrations'] as $type => $files) {
+                    $this->line("      {$type}: " . implode(', ', $files));
+                }
+            }
+            
+            if (!empty($tenantIssues['seeders'])) {
+                $this->warn("   🌱 Seeder Issues:");
+                foreach ($tenantIssues['seeders'] as $type => $issue) {
+                    $this->line("      {$type}: {$issue}");
+                }
+            }
+        }
+    }
+
+    /**
+     * Check migration health for current tenant
+     */
+    private function checkMigrationHealth(): string
+    {
+        try {
+            $pending = DB::table('migrations')->count();
+            $total = count(glob(base_path(config('artflow-tenancy.migrations.tenant_migrations_path', 'database/migrations/tenant') . '/*.php')));
+            
+            if ($pending === 0) {
+                return 'no_migrations';
+            } elseif ($pending < $total) {
+                return 'pending_migrations';
+            } else {
+                return 'up_to_date';
+            }
+        } catch (\Exception $e) {
+            return 'error';
+        }
+    }
+
+    /**
+     * Display health report
+     */
+    private function displayHealthReport(array $healthReport): void
+    {
+        $this->info("🏥 Health Report Summary:");
+        
+        $headers = ['Tenant', 'Connection', 'Migrations', 'Tables', 'Size', 'Issues'];
+        $rows = [];
+        
+        foreach ($healthReport as $tenantName => $health) {
+            $connectionStatus = $health['connection'] ? '✅ OK' : '❌ Failed';
+            $migrationStatus = match($health['migrations']) {
+                'up_to_date' => '✅ Current',
+                'pending_migrations' => '⚠️ Pending',
+                'no_migrations' => '🔄 None',
+                'error' => '❌ Error',
+                default => '❓ Unknown'
+            };
+            
+            $issuesText = empty($health['issues']) ? '✅ None' : '❌ ' . count($health['issues']);
+            
+            $rows[] = [
+                Str::limit($tenantName, 20),
+                $connectionStatus,
+                $migrationStatus,
+                $health['tables'],
+                $health['size'],
+                $issuesText
+            ];
+        }
+        
+        $this->table($headers, $rows);
+        
+        // Show detailed issues if any
+        foreach ($healthReport as $tenantName => $health) {
+            if (!empty($health['issues'])) {
+                $this->newLine();
+                $this->error("❌ Issues for {$tenantName}:");
+                foreach ($health['issues'] as $issue) {
+                    $this->line("   • {$issue}");
+                }
+            }
+        }
     }
 }

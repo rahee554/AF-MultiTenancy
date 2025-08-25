@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\Testing;
+namespace ArtflowStudio\Tenancy\Commands\Testing\System;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Route;
@@ -26,12 +26,12 @@ class TestMiddlewareCommand extends Command
         
         $found = [];
         $expected = [
-            'tenant' => 'ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware',
-            'smart.tenant' => 'ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware',
+            'tenant' => 'ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware',
+            'smart.tenant' => 'ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolverMiddleware',
             'tenant.auth' => 'ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware',
             'tenancy.api' => 'ArtflowStudio\Tenancy\Http\Middleware\ApiAuthMiddleware',
             'central.tenant' => 'ArtflowStudio\Tenancy\Http\Middleware\CentralDomainMiddleware',
-            'smart.domain' => 'ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolver',
+            'smart.domain' => 'ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolverMiddleware',
             'tenant.homepage' => 'ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware',
         ];
 
@@ -72,8 +72,10 @@ class TestMiddlewareCommand extends Command
         $this->line('────────────────────────────────────');
         
         $testClasses = [
-            'ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware',
+            'ArtflowStudio\Tenancy\Http\Middleware\TenantMiddleware',
             'ArtflowStudio\Tenancy\Http\Middleware\TenantAuthMiddleware',
+            'ArtflowStudio\Tenancy\Http\Middleware\SmartDomainResolverMiddleware',
+            'ArtflowStudio\Tenancy\Http\Middleware\HomepageRedirectMiddleware',
         ];
 
         foreach ($testClasses as $class) {

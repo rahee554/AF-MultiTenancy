@@ -5,8 +5,9 @@ namespace ArtflowStudio\Tenancy\Services;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Stancl\Tenancy\Contracts\TenantResolver;
+use Stancl\Tenancy\Contracts\Tenant;
 use Stancl\Tenancy\Database\Models\Domain;
-use Stancl\Tenancy\Database\Models\Tenant;
+use Exception;
 
 /**
  * Cached Tenant Resolver
@@ -32,12 +33,16 @@ class CachedTenantResolver implements TenantResolver
     /**
      * Resolve tenant by domain with caching
      */
-    public function resolve(...$args): ?Tenant
+    public function resolve(...$args): Tenant
     {
         $domain = $args[0] ?? request()->getHost();
         
         if (!$this->isCachedLookupEnabled()) {
-            return $this->resolveFresh($domain);
+            $tenant = $this->resolveFresh($domain);
+            if ($tenant) {
+                return $tenant;
+            }
+            throw new Exception("Tenant could not be identified for domain: {$domain}");
         }
 
         $cacheKey = $this->getCacheKey($domain);
@@ -61,13 +66,13 @@ class CachedTenantResolver implements TenantResolver
                     'tenant_id' => $tenant->getTenantKey(),
                     'cache_ttl' => $this->cacheTtl
                 ]);
+                return $tenant;
             } else {
                 Log::debug('CachedTenantResolver: No tenant found for domain', [
                     'domain' => $domain
                 ]);
+                throw new Exception("Tenant could not be identified for domain: {$domain}");
             }
-            
-            return $tenant;
         });
     }
 

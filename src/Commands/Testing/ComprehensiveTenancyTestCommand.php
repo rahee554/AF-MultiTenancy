@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Stancl\Tenancy\Tenancy;
-use Stancl\Tenancy\Database\Models\Tenant;
+use ArtflowStudio\Tenancy\Models\Tenant;
 use Stancl\Tenancy\Database\Models\Domain;
 use ArtflowStudio\Tenancy\Services\TenantService;
 
@@ -23,7 +23,7 @@ class ComprehensiveTenancyTestCommand extends Command
                           {--create-test-tenant : Create a test tenant if none exist}
                           {--cleanup : Clean up test data after tests}
                           {--skip-redis : Skip Redis tests}
-                          {--verbose : Show detailed output}';
+                          {--detailed : Show detailed output}';
 
     protected $description = 'Run comprehensive tests of the tenancy system including Universal Middleware';
 
@@ -46,23 +46,44 @@ class ComprehensiveTenancyTestCommand extends Command
         $this->info('🚀 Testing Universal Middleware and stancl/tenancy integration');
         $this->line('');
 
-        try {
-            // Pre-test setup
-            $this->setupTestEnvironment();
+        // Define test phases
+        $testPhases = [
+            'Setup' => 'setupTestEnvironment',
+            'Central Context' => 'testCentralContext',
+            'Tenant Resolution' => 'testTenantResolution',
+            'Tenant Context' => 'testTenantContext',
+            'Database Isolation' => 'testDatabaseIsolation',
+            'Cache Isolation' => 'testCacheIsolation'
+        ];
 
-            // Core tenancy tests
-            $this->testCentralContext();
-            $this->testTenantResolution();
-            $this->testTenantContext();
-            $this->testDatabaseIsolation();
-            $this->testCacheIsolation();
+        $progressBar = $this->output->createProgressBar(count($testPhases));
+        $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% %elapsed:6s% | %message%');
+        $progressBar->start();
+
+        try {
+            foreach ($testPhases as $phaseName => $method) {
+                $progressBar->setMessage("Running: {$phaseName}");
+                $this->{$method}();
+                $progressBar->advance();
+                
+                if ($this->option('detailed')) {
+                    $this->line("   ✅ {$phaseName} completed");
+                }
+            }
+
+            $progressBar->setMessage('Generating report...');
+            $progressBar->finish();
+            $this->newLine();
 
             // Display comprehensive results
             $this->displayResults();
 
         } catch (\Exception $e) {
+            $progressBar->setMessage('Test failed!');
+            $progressBar->finish();
+            $this->newLine();
             $this->error('❌ Test suite failed: ' . $e->getMessage());
-            if ($this->option('verbose')) {
+            if ($this->option('detailed')) {
                 $this->line($e->getTraceAsString());
             }
         } finally {
@@ -262,11 +283,11 @@ class ComprehensiveTenancyTestCommand extends Command
         foreach ($tests as $testName => $result) {
             if ($result === true) {
                 $passed++;
-                if ($this->option('verbose')) {
+                if ($this->option('detailed')) {
                     $this->line("      ✅ {$testName}");
                 }
             } else {
-                if ($this->option('verbose')) {
+                if ($this->option('detailed')) {
                     $this->line("      ❌ {$testName}");
                 }
             }

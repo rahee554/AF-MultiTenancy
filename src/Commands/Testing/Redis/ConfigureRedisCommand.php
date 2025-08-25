@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\Testing;
+namespace ArtflowStudio\Tenancy\Commands\Testing\Redis;
 
 use Illuminate\Console\Command;
 use ArtflowStudio\Tenancy\Services\RedisHelper;

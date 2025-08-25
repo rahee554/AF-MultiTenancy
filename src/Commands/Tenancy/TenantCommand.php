@@ -50,7 +50,15 @@ class TenantCommand extends Command
             $this->comment('💡 For tenant creation, use: php artisan tenant:create');
             $this->comment('💡 For database operations (migrate, seed, rollback), use: php artisan tenant:db');
             $this->newLine();
-            $action = $this->choice('Please select an action', array_keys($actions));
+            
+            // Convert to numbered choice format
+            $actionKeys = array_keys($actions);
+            $actionLabels = array_map(function($key) use ($actions) {
+                return $actions[$key];
+            }, $actionKeys);
+            
+            $selectedIndex = $this->choice('Please select an action', $actionLabels);
+            $action = $actionKeys[array_search($selectedIndex, $actionLabels)];
         }
 
         // Check for database operations first and redirect
@@ -83,13 +91,17 @@ class TenantCommand extends Command
             return 0;
         }
 
-        $headers = ['ID', 'Name', 'Domain', 'Database', 'Status', 'Homepage', 'Created'];
-        $rows = $tenants->map(function ($tenant) {
+        $this->info('📋 Tenants List');
+        $this->newLine();
+
+        $headers = ['#', 'Name', 'Domain', 'ID', 'Database', 'Status', 'Homepage', 'Created'];
+        $rows = $tenants->map(function ($tenant, $index) {
             $domain = $tenant->domains->first()?->domain ?? 'No domain';
             return [
-                Str::limit($tenant->id, 8) . '...',
+                "[$index]",
                 $tenant->name ?? 'N/A',
                 $domain,
+                Str::limit($tenant->id, 12) . '...',
                 $tenant->database ?? 'default',
                 $tenant->status ?? 'active',
                 $tenant->has_homepage ? '✅' : '❌',
@@ -98,7 +110,10 @@ class TenantCommand extends Command
         });
 
         $this->table($headers, $rows);
-        $this->info("Total tenants: {$tenants->count()}");
+        
+        $this->newLine();
+        $this->comment('💡 Use the # number for tenant operations (e.g., [0], [1], [2])');
+        
         return 0;
     }
 
@@ -208,7 +223,38 @@ class TenantCommand extends Command
         $tenantIdentifier = $this->option('tenant');
         
         if (!$tenantIdentifier) {
-            $tenantIdentifier = $this->ask('Enter tenant UUID or name');
+            // List all tenants with numbers
+            $tenants = Tenant::all();
+            
+            if ($tenants->isEmpty()) {
+                $this->error('No tenants found.');
+                return null;
+            }
+            
+            $this->line('Available tenants:');
+            $this->newLine();
+            
+            foreach ($tenants as $index => $tenant) {
+                $domain = $tenant->domains->first()?->domain ?? 'No domain';
+                $name = $tenant->name ?? 'Unnamed';
+                $this->line("  [{$index}] {$name} - {$domain}");
+            }
+            
+            $this->newLine();
+            $input = $this->ask('Enter tenant number, UUID, or name');
+            
+            // Check if input is a number (index)
+            if (is_numeric($input)) {
+                $index = (int) $input;
+                if (isset($tenants[$index])) {
+                    return $tenants[$index];
+                } else {
+                    $this->error("Invalid tenant number: {$input}");
+                    return null;
+                }
+            }
+            
+            $tenantIdentifier = $input;
         }
 
         // Try to find by UUID first

@@ -45,7 +45,8 @@ return [
         'universal' => ['universal.web'], // Routes that work for both central and tenant
         'central_only' => ['central.web'], // Routes that only work on central domains
         'tenant_only' => ['tenant.web'], // Routes that only work on tenant domains
-        'api' => ['universal.api'], // API routes
+        'ui' => ['web'], // UI routes (fallback for tenant-specific UI)
+        'api' => ['api'], // API routes
         'admin' => ['central.web', 'auth'], // Admin routes
     ],
 

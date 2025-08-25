@@ -56,18 +56,32 @@ class BackupManagementCommand extends Command
 
     private function showMainMenu(): string
     {
-        return $this->choice(
+        $options = [
+            '📦 Create Backup',
+            '🔄 Restore from Backup', 
+            '📋 List Backups',
+            '🧹 Cleanup Old Backups',
+            '⚙️  Backup Settings',
+            '🚪 Exit'
+        ];
+        
+        $choice = $this->choice(
             '🔧 What would you like to do?',
-            [
-                'backup' => '📦 Create Backup',
-                'restore' => '🔄 Restore from Backup', 
-                'list' => '📋 List Backups',
-                'cleanup' => '🧹 Cleanup Old Backups',
-                'settings' => '⚙️  Backup Settings',
-                'exit' => '🚪 Exit'
-            ],
-            'backup'
+            $options,
+            0
         );
+        
+        // Map numbered choice back to action
+        $actionMap = [
+            '📦 Create Backup' => 'backup',
+            '🔄 Restore from Backup' => 'restore',
+            '📋 List Backups' => 'list',
+            '🧹 Cleanup Old Backups' => 'cleanup',
+            '⚙️  Backup Settings' => 'settings',
+            '🚪 Exit' => 'exit'
+        ];
+        
+        return $actionMap[$choice];
     }
 
     private function handleAction(string $action): void
@@ -97,15 +111,26 @@ class BackupManagementCommand extends Command
         $this->newLine();
 
         // Select backup scope
-        $scope = $this->choice(
+        $scopeOptions = [
+            'Single Tenant',
+            'Multiple Tenants',
+            'All Tenants'
+        ];
+        
+        $scopeChoice = $this->choice(
             'Backup scope:',
-            [
-                'single' => 'Single Tenant',
-                'multiple' => 'Multiple Tenants',
-                'all' => 'All Tenants'
-            ],
-            'single'
+            $scopeOptions,
+            0
         );
+        
+        // Map choice back to scope
+        $scopeMap = [
+            'Single Tenant' => 'single',
+            'Multiple Tenants' => 'multiple',
+            'All Tenants' => 'all'
+        ];
+        
+        $scope = $scopeMap[$scopeChoice];
 
         $tenants = $this->selectTenants($scope);
         if (empty($tenants)) {
@@ -247,7 +272,7 @@ class BackupManagementCommand extends Command
                 
             case 'all':
                 if ($this->confirm("Backup all {$allTenants->count()} tenants?", false)) {
-                    return $allTenants->toArray();
+                    return $allTenants->all();
                 }
                 return [];
                 
@@ -265,44 +290,61 @@ class BackupManagementCommand extends Command
             return null;
         }
 
+        $this->line('Available tenants:');
+        $this->newLine();
+        
         $choices = [];
-        foreach ($tenants as $tenant) {
-            $choices[$tenant->id] = "{$tenant->id} - {$tenant->name}";
+        foreach ($tenants as $index => $tenant) {
+            $domain = $tenant->domains->first()?->domain ?? 'No domain';
+            $name = $tenant->name ?? 'Unnamed';
+            $this->line("  [{$index}] {$name} - {$domain} ({$tenant->id})");
+            $choices[$index] = $tenant;
         }
 
-        $selectedId = $this->choice('Select tenant:', $choices);
-        return Tenant::find($selectedId);
+        $this->newLine();
+        $selectedIndex = $this->ask('Select tenant by number', '0');
+        
+        if (!is_numeric($selectedIndex) || !isset($choices[$selectedIndex])) {
+            $this->error('Invalid tenant selection.');
+            return null;
+        }
+        
+        return $choices[$selectedIndex];
     }
 
     private function selectMultipleTenants($tenants): array
     {
         $selected = [];
-        $choices = [];
         
-        foreach ($tenants as $tenant) {
-            $choices[$tenant->id] = "{$tenant->id} - {$tenant->name}";
+        $this->line('Available tenants:');
+        $this->newLine();
+        
+        $choices = [];
+        foreach ($tenants as $index => $tenant) {
+            $domain = $tenant->domains->first()?->domain ?? 'No domain';
+            $name = $tenant->name ?? 'Unnamed';
+            $this->line("  [{$index}] {$name} - {$domain} ({$tenant->id})");
+            $choices[$index] = $tenant;
         }
 
-        $this->line('Select multiple tenants (type "done" when finished):');
+        $this->newLine();
+        $this->line('Select multiple tenants by number (comma-separated, e.g., 0,1,3):');
+        $this->line('Or type "all" to select all tenants');
         
-        while (true) {
-            $remaining = array_diff_key($choices, array_flip(array_column($selected, 'id')));
-            
-            if (empty($remaining)) {
-                $this->line('All tenants selected.');
-                break;
+        $input = $this->ask('Selection');
+        
+        if (strtolower($input) === 'all') {
+            return $tenants->toArray();
+        }
+        
+        $indices = array_map('trim', explode(',', $input));
+        
+        foreach ($indices as $index) {
+            if (is_numeric($index) && isset($choices[$index])) {
+                $selected[] = $choices[$index];
+            } else {
+                $this->warn("Invalid selection: {$index}");
             }
-
-            $remaining['done'] = '✅ Done selecting';
-            
-            $choice = $this->choice('Select tenant:', $remaining);
-            
-            if ($choice === 'done') {
-                break;
-            }
-            
-            $selected[] = Tenant::find($choice);
-            $this->info("Added: {$choice}");
         }
 
         return $selected;

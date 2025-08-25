@@ -15,6 +15,7 @@ class TenantBackupService
     private string $backupDisk;
     private string $mysqldumpPath;
     private string $mysqlPath;
+    private array $availableMethods;
 
     public function __construct()
     {
@@ -23,6 +24,67 @@ class TenantBackupService
         $this->mysqlPath = config('artflow-tenancy.backup.mysql_path', 'mysql');
         
         $this->ensureBackupDiskExists();
+        $this->detectAvailableMethods();
+    }
+
+    /**
+     * Detect available backup methods
+     */
+    private function detectAvailableMethods(): void
+    {
+        $this->availableMethods = [];
+        
+        // Test mysqldump
+        if ($this->testBinaryAvailability($this->mysqldumpPath, '--version')) {
+            $this->availableMethods[] = 'mysqldump';
+        }
+        
+        // Test mysql client
+        if ($this->testBinaryAvailability($this->mysqlPath, '--version')) {
+            $this->availableMethods[] = 'mysql-client';
+        }
+        
+        // PHP-based methods are always available
+        $this->availableMethods[] = 'php-export';
+        $this->availableMethods[] = 'phpmyadmin-style';
+    }
+
+    /**
+     * Test if a binary is available
+     */
+    private function testBinaryAvailability(string $binary, string $testArg = '--version'): bool
+    {
+        try {
+            $testCommand = '"' . $binary . '" ' . $testArg;
+            $process = Process::run($testCommand);
+            return !$process->failed();
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Get available backup methods
+     */
+    public function getAvailableMethods(): array
+    {
+        return $this->availableMethods;
+    }
+
+    /**
+     * Get recommended backup method
+     */
+    public function getRecommendedMethod(): string
+    {
+        $priority = ['mysqldump', 'php-export', 'phpmyadmin-style', 'mysql-client'];
+        
+        foreach ($priority as $method) {
+            if (in_array($method, $this->availableMethods)) {
+                return $method;
+            }
+        }
+        
+        return 'php-export'; // Ultimate fallback
     }
 
     /**
@@ -30,18 +92,33 @@ class TenantBackupService
      */
     public function createBackup(Tenant $tenant, array $options = []): array
     {
-        $compress = $options['compress'] ?? false;
+        $method = $options['method'] ?? $this->getRecommendedMethod();
+        $compress = $options['compress'] ?? config('artflow-tenancy.backup.compress_by_default', true);
         $structureOnly = $options['structure_only'] ?? false;
         $force = $options['force'] ?? false;
+
+        // Validate that the selected method is available
+        if (!in_array($method, $this->availableMethods)) {
+            throw new \Exception("Backup method '{$method}' is not available. Available methods: " . implode(', ', $this->availableMethods));
+        }
 
         // Get tenant database info
         $dbInfo = $this->getTenantDatabaseInfo($tenant);
         
-        // Generate backup filename
+        // Generate backup filename with better format: database_domain_timestamp_type_method.sql(.gz)
         $timestamp = Carbon::now()->format('Y-m-d_H-i-s');
         $type = $structureOnly ? 'structure' : 'full';
         $extension = $compress ? '.sql.gz' : '.sql';
-        $filename = "tenant_{$tenant->id}_{$timestamp}_{$type}{$extension}";
+        
+        // Get primary domain for filename
+        $domain = 'unknown';
+        if ($tenant->domains && $tenant->domains->count() > 0) {
+            $domain = $tenant->domains->first()->domain;
+        }
+        $domain = str_replace(['.', ' '], ['_', '_'], $domain); // Replace dots and spaces for filename safety
+        
+        // Create filename: database_domain_timestamp_type_method.sql(.gz)
+        $filename = "{$tenant->database}_{$domain}_{$timestamp}_{$type}_{$method}{$extension}";
         
         // Create tenant backup directory
         $tenantBackupPath = $this->getTenantBackupPath($tenant);
@@ -54,8 +131,20 @@ class TenantBackupService
         File::ensureDirectoryExists(dirname($tempPath));
         
         try {
-            // Create backup using mysqldump
-            $this->createMysqlDump($dbInfo, $tempPath, $structureOnly);
+            // Create backup using the selected method
+            switch ($method) {
+                case 'mysqldump':
+                    $this->createMysqlDump($dbInfo, $tempPath, $structureOnly);
+                    break;
+                case 'php-export':
+                    $this->createPhpExport($dbInfo, $tempPath, $structureOnly);
+                    break;
+                case 'phpmyadmin-style':
+                    $this->createPhpMyAdminStyleExport($dbInfo, $tempPath, $structureOnly);
+                    break;
+                default:
+                    throw new \Exception("Unsupported backup method: {$method}");
+            }
             
             // Compress if requested
             if ($compress) {
@@ -77,6 +166,7 @@ class TenantBackupService
                 'path' => $backupPath,
                 'size' => $fileSize,
                 'type' => $type,
+                'method' => $method,
                 'compressed' => $compress,
                 'created_at' => Carbon::now(),
             ]);
@@ -87,6 +177,7 @@ class TenantBackupService
                 'size' => $fileSize,
                 'size_human' => $this->formatBytes($fileSize),
                 'type' => $type,
+                'method' => $method,
                 'compressed' => $compress,
                 'created_at' => Carbon::now(),
             ];
@@ -105,6 +196,9 @@ class TenantBackupService
      */
     public function restoreBackup(Tenant $tenant, array $backup): array
     {
+        // Validate MySQL binaries before attempting restore
+        $this->validateMysqlBinaries();
+        
         $dbInfo = $this->getTenantDatabaseInfo($tenant);
         $backupPath = $backup['path'];
         
@@ -230,6 +324,7 @@ class TenantBackupService
                 'username' => $config['username'],
                 'password' => $config['password'],
                 'charset' => $config['charset'] ?? 'utf8mb4',
+                'collation' => $config['collation'] ?? 'utf8mb4_unicode_ci',
             ];
             
         } finally {
@@ -268,6 +363,208 @@ class TenantBackupService
         if ($process->failed()) {
             throw new \Exception('MySQL dump failed: ' . $process->errorOutput());
         }
+    }
+
+    /**
+     * Create backup using PHP-based export
+     */
+    private function createPhpExport(array $dbInfo, string $outputPath, bool $structureOnly = false): void
+    {
+        $connection = $this->createTenantConnection($dbInfo);
+        $sql = '';
+        
+        // Add header
+        $sql .= "-- MySQL dump created by PHP Export\n";
+        $sql .= "-- Host: {$dbInfo['host']}    Database: {$dbInfo['database']}\n";
+        $sql .= "-- ------------------------------------------------------\n";
+        $sql .= "-- Server version: " . $connection->getPdo()->getAttribute(\PDO::ATTR_SERVER_VERSION) . "\n\n";
+        
+        $sql .= "SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT;\n";
+        $sql .= "SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS;\n";
+        $sql .= "SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION;\n";
+        $sql .= "SET NAMES utf8mb4;\n";
+        $sql .= "SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;\n";
+        $sql .= "SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;\n";
+        $sql .= "SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='NO_AUTO_VALUE_ON_ZERO';\n";
+        $sql .= "SET @OLD_AUTOCOMMIT=@@AUTOCOMMIT, AUTOCOMMIT=0;\n";
+        $sql .= "START TRANSACTION;\n\n";
+
+        // Get all tables
+        $tables = $connection->select("SHOW TABLES");
+        $tableColumn = 'Tables_in_' . $dbInfo['database'];
+
+        foreach ($tables as $table) {
+            $tableName = $table->$tableColumn;
+            
+            // Get table structure
+            $createTable = $connection->select("SHOW CREATE TABLE `{$tableName}`")[0];
+            $sql .= "-- Table structure for table `{$tableName}`\n";
+            $sql .= "DROP TABLE IF EXISTS `{$tableName}`;\n";
+            $sql .= $createTable->{'Create Table'} . ";\n\n";
+            
+            // Export data if not structure only
+            if (!$structureOnly) {
+                $sql .= "-- Dumping data for table `{$tableName}`\n";
+                $sql .= "LOCK TABLES `{$tableName}` WRITE;\n";
+                
+                $rows = $connection->select("SELECT * FROM `{$tableName}`");
+                if (!empty($rows)) {
+                    $sql .= "INSERT INTO `{$tableName}` VALUES ";
+                    $values = [];
+                    
+                    foreach ($rows as $row) {
+                        $rowData = [];
+                        foreach ((array) $row as $value) {
+                            if ($value === null) {
+                                $rowData[] = 'NULL';
+                            } else {
+                                $rowData[] = $connection->getPdo()->quote($value);
+                            }
+                        }
+                        $values[] = '(' . implode(',', $rowData) . ')';
+                    }
+                    
+                    $sql .= implode(",\n", $values) . ";\n";
+                }
+                
+                $sql .= "UNLOCK TABLES;\n\n";
+            }
+        }
+
+        // Add footer
+        $sql .= "COMMIT;\n";
+        $sql .= "SET SQL_MODE=@OLD_SQL_MODE;\n";
+        $sql .= "SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;\n";
+        $sql .= "SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;\n";
+        $sql .= "SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT;\n";
+        $sql .= "SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS;\n";
+        $sql .= "SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION;\n";
+        $sql .= "SET AUTOCOMMIT=@OLD_AUTOCOMMIT;\n";
+
+        File::put($outputPath, $sql);
+    }
+
+    /**
+     * Create backup using phpMyAdmin-style export
+     */
+    private function createPhpMyAdminStyleExport(array $dbInfo, string $outputPath, bool $structureOnly = false): void
+    {
+        $connection = $this->createTenantConnection($dbInfo);
+        $sql = '';
+        
+        // Add phpMyAdmin style header
+        $sql .= "-- phpMyAdmin SQL Dump\n";
+        $sql .= "-- version 5.2.0 (Generated by ArtFlow Tenancy)\n";
+        $sql .= "-- https://www.phpmyadmin.net/\n";
+        $sql .= "--\n";
+        $sql .= "-- Host: {$dbInfo['host']}:{$dbInfo['port']}\n";
+        $sql .= "-- Generation Time: " . Carbon::now()->format('M d, Y \a\t h:i A') . "\n";
+        $sql .= "-- Server version: " . $connection->getPdo()->getAttribute(\PDO::ATTR_SERVER_VERSION) . "\n";
+        $sql .= "-- PHP Version: " . PHP_VERSION . "\n\n";
+        
+        $sql .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
+        $sql .= "START TRANSACTION;\n";
+        $sql .= "SET time_zone = \"+00:00\";\n\n";
+        
+        $sql .= "/*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;\n";
+        $sql .= "/*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;\n";
+        $sql .= "/*!40101 SET @OLD_COLLATION_CONNECTION=@@COLLATION_CONNECTION */;\n";
+        $sql .= "/*!40101 SET NAMES utf8mb4 */;\n\n";
+        
+        $sql .= "--\n";
+        $sql .= "-- Database: `{$dbInfo['database']}`\n";
+        $sql .= "--\n\n";
+
+        // Get all tables
+        $tables = $connection->select("SHOW TABLES");
+        $tableColumn = 'Tables_in_' . $dbInfo['database'];
+
+        foreach ($tables as $table) {
+            $tableName = $table->$tableColumn;
+            
+            $sql .= "-- --------------------------------------------------------\n\n";
+            $sql .= "--\n";
+            $sql .= "-- Table structure for table `{$tableName}`\n";
+            $sql .= "--\n\n";
+            
+            $sql .= "DROP TABLE IF EXISTS `{$tableName}`;\n";
+            
+            $createTable = $connection->select("SHOW CREATE TABLE `{$tableName}`")[0];
+            $sql .= $createTable->{'Create Table'} . ";\n\n";
+            
+            // Export data if not structure only
+            if (!$structureOnly) {
+                $sql .= "--\n";
+                $sql .= "-- Dumping data for table `{$tableName}`\n";
+                $sql .= "--\n\n";
+                
+                $rows = $connection->select("SELECT * FROM `{$tableName}`");
+                if (!empty($rows)) {
+                    $columns = array_keys((array) $rows[0]);
+                    $columnList = '`' . implode('`, `', $columns) . '`';
+                    
+                    $sql .= "INSERT INTO `{$tableName}` ({$columnList}) VALUES\n";
+                    $values = [];
+                    
+                    foreach ($rows as $row) {
+                        $rowData = [];
+                        foreach ((array) $row as $value) {
+                            if ($value === null) {
+                                $rowData[] = 'NULL';
+                            } else {
+                                $rowData[] = $connection->getPdo()->quote($value);
+                            }
+                        }
+                        $values[] = '(' . implode(', ', $rowData) . ')';
+                    }
+                    
+                    $sql .= implode(",\n", $values) . ";\n\n";
+                } else {
+                    $sql .= "-- No data to dump for table `{$tableName}`\n\n";
+                }
+            }
+        }
+
+        // Add footer
+        $sql .= "COMMIT;\n\n";
+        $sql .= "/*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;\n";
+        $sql .= "/*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;\n";
+        $sql .= "/*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;\n";
+
+        File::put($outputPath, $sql);
+    }
+
+    /**
+     * Create a tenant database connection
+     */
+    private function createTenantConnection(array $dbInfo): \Illuminate\Database\Connection
+    {
+        $config = [
+            'driver' => 'mysql',
+            'host' => $dbInfo['host'],
+            'port' => $dbInfo['port'],
+            'database' => $dbInfo['database'],
+            'username' => $dbInfo['username'],
+            'password' => $dbInfo['password'],
+            'charset' => $dbInfo['charset'],
+            'collation' => $dbInfo['collation'],
+            'prefix' => '',
+            'strict' => true,
+            'engine' => null,
+        ];
+
+        // Create a new PDO connection for the tenant database
+        $pdo = new \PDO(
+            "mysql:host={$dbInfo['host']};port={$dbInfo['port']};dbname={$dbInfo['database']};charset={$dbInfo['charset']}",
+            $dbInfo['username'],
+            $dbInfo['password'],
+            [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_OBJ,
+            ]
+        );
+
+        return new \Illuminate\Database\MySqlConnection($pdo, $dbInfo['database'], '', $config);
     }
 
     /**
@@ -314,37 +611,51 @@ class TenantBackupService
     }
 
     /**
-     * Compress backup file
+     * Compress backup file using PHP's gzip functions (cross-platform)
      */
     private function compressBackup(string $filePath): void
     {
-        $compressedPath = $filePath . '.gz';
-        
-        $process = Process::run("gzip -c " . escapeshellarg($filePath) . " > " . escapeshellarg($compressedPath));
-        
-        if ($process->failed()) {
-            throw new \Exception('Backup compression failed: ' . $process->errorOutput());
+        try {
+            // Read the original file
+            $originalContent = File::get($filePath);
+            
+            // Compress using PHP's gzcompress
+            $compressedContent = gzencode($originalContent, 9); // Maximum compression level
+            
+            if ($compressedContent === false) {
+                throw new \Exception('Failed to compress backup file');
+            }
+            
+            // Write compressed content back to the same file
+            File::put($filePath, $compressedContent);
+            
+        } catch (\Exception $e) {
+            throw new \Exception('Backup compression failed: ' . $e->getMessage());
         }
-        
-        // Replace original with compressed
-        File::move($compressedPath, $filePath);
     }
 
     /**
-     * Decompress backup file
+     * Decompress backup file using PHP's gzip functions (cross-platform)
      */
     private function decompressBackup(string $filePath): void
     {
-        $decompressedPath = str_replace('.gz', '', $filePath);
-        
-        $process = Process::run("gunzip -c " . escapeshellarg($filePath) . " > " . escapeshellarg($decompressedPath));
-        
-        if ($process->failed()) {
-            throw new \Exception('Backup decompression failed: ' . $process->errorOutput());
+        try {
+            // Read the compressed file
+            $compressedContent = File::get($filePath);
+            
+            // Decompress using PHP's gzdecode
+            $originalContent = gzdecode($compressedContent);
+            
+            if ($originalContent === false) {
+                throw new \Exception('Failed to decompress backup file');
+            }
+            
+            // Write decompressed content back to the same file
+            File::put($filePath, $originalContent);
+            
+        } catch (\Exception $e) {
+            throw new \Exception('Backup decompression failed: ' . $e->getMessage());
         }
-        
-        // Replace compressed with decompressed
-        File::move($decompressedPath, $filePath);
     }
 
     /**
@@ -465,6 +776,44 @@ class TenantBackupService
                     'throw' => false,
                 ]
             ]);
+        }
+    }
+
+    /**
+     * Validate that MySQL binaries are available
+     */
+    private function validateMysqlBinaries(): void
+    {
+        // Check if mysqldump is available
+        $testCommand = '"' . $this->mysqldumpPath . '"' . ' --version';
+        $process = Process::run($testCommand);
+        
+        if ($process->failed()) {
+            $errorMessage = "MySQL dump binary not found at: {$this->mysqldumpPath}\n\n";
+            $errorMessage .= "To fix this issue:\n";
+            $errorMessage .= "1. Install MySQL client tools and add to PATH, OR\n";
+            $errorMessage .= "2. Set the binary path in your .env file:\n";
+            $errorMessage .= "   TENANT_BACKUP_MYSQLDUMP_PATH=\"C:\\xampp\\mysql\\bin\\mysqldump.exe\"\n";
+            $errorMessage .= "   TENANT_BACKUP_MYSQL_PATH=\"C:\\xampp\\mysql\\bin\\mysql.exe\"\n\n";
+            $errorMessage .= "Common locations to check:\n";
+            $errorMessage .= "  • C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe\n";
+            $errorMessage .= "  • C:\\xampp\\mysql\\bin\\mysqldump.exe\n";
+            $errorMessage .= "  • C:\\wamp64\\bin\\mysql\\mysql8.x.x\\bin\\mysqldump.exe\n\n";
+            $errorMessage .= "Error details: " . $process->errorOutput();
+            
+            throw new \Exception($errorMessage);
+        }
+        
+        // Check if mysql restore binary is available
+        $testCommand = '"' . $this->mysqlPath . '"' . ' --version';
+        $process = Process::run($testCommand);
+        
+        if ($process->failed()) {
+            $errorMessage = "MySQL restore binary not found at: {$this->mysqlPath}\n\n";
+            $errorMessage .= "Please configure TENANT_BACKUP_MYSQL_PATH in your .env file.\n";
+            $errorMessage .= "Error details: " . $process->errorOutput();
+            
+            throw new \Exception($errorMessage);
         }
     }
 

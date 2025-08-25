@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands;
+namespace ArtflowStudio\Tenancy\Commands\Installation;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;

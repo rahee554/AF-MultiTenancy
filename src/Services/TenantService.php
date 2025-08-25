@@ -605,13 +605,9 @@ class TenantService
             $tempTenant->setInternal('db_name', $databaseName);
             
             // Create the database using stancl/tenancy's manager
-            $result = $databaseManager->createDatabase($tempTenant);
+            $databaseManager->createDatabase($tempTenant);
             
-            if ($result) {
-                Log::info("Physical database created using stancl/tenancy: {$databaseName}");
-            } else {
-                Log::warning("Database creation returned false: {$databaseName}");
-            }
+            Log::info("Physical database created using stancl/tenancy: {$databaseName}");
             
         } catch (\Exception $e) {
             // Fallback to direct SQL if stancl/tenancy fails

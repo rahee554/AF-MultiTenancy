@@ -14,16 +14,17 @@ use Stancl\Tenancy\Database\Models\Tenant;
 class TenantMaintenanceModeCommand extends Command
 {
     protected $signature = 'tenants:maintenance 
-                          {action : Action: enable, disable, status, list}
+                          {action? : Action: enable, disable, status, list (optional - will prompt if not provided)}
                           {--tenant= : Tenant ID}
                           {--all : Apply to all tenants}
                           {--message= : Maintenance message}
                           {--allowed-ips= : Comma-separated list of allowed IPs}
                           {--bypass-key= : Bypass key for maintenance mode}
                           {--retry-after= : Retry-After header value in seconds}
-                          {--admin-contact= : Admin contact information}';
+                          {--admin-contact= : Admin contact information}
+                          {--auto-accept : Auto accept all prompts (for automation)}';
 
-    protected $description = 'Manage maintenance mode for tenants';
+    protected $description = 'Manage maintenance mode for tenants - Interactive interface';
 
     protected $maintenanceService;
 
@@ -35,7 +36,14 @@ class TenantMaintenanceModeCommand extends Command
 
     public function handle()
     {
+        $this->displayHeader();
+        
         $action = $this->argument('action');
+
+        // If no action provided, make it interactive
+        if (!$action) {
+            $action = $this->selectAction();
+        }
 
         switch ($action) {
             case 'enable':
@@ -54,31 +62,236 @@ class TenantMaintenanceModeCommand extends Command
     }
 
     /**
-     * Enable maintenance mode
+     * Display command header
+     */
+    protected function displayHeader()
+    {
+        $this->info('🔧 Tenant Maintenance Mode Manager');
+        $this->info('=====================================');
+        $this->newLine();
+    }
+
+    /**
+     * Interactive action selection
+     */
+    protected function selectAction()
+    {
+        $this->info('What would you like to do?');
+        $this->line('  [0] 🔧 Enable maintenance mode');
+        $this->line('  [1] ✅ Disable maintenance mode'); 
+        $this->line('  [2] 📊 Check maintenance status');
+        $this->line('  [3] 📋 List tenants in maintenance');
+        $this->newLine();
+
+        $choice = $this->ask('Select option by number', '3');
+        
+        switch ($choice) {
+            case '0':
+                return 'enable';
+            case '1':
+                return 'disable';
+            case '2':
+                return 'status';
+            case '3':
+                return 'list';
+            default:
+                $this->error('Invalid choice. Please select 0-3.');
+                return $this->selectAction();
+        }
+    }
+
+    /**
+     * Enable maintenance mode - Interactive version
      */
     protected function enableMaintenance()
     {
+        $this->info('🔧 Enable Maintenance Mode');
+        $this->line('========================');
+        $this->newLine();
+
+        // Check if options are provided or make it interactive
         $tenantId = $this->option('tenant');
         $applyToAll = $this->option('all');
+        $autoAccept = $this->option('auto-accept');
 
+        // Interactive tenant selection if not specified
         if (!$tenantId && !$applyToAll) {
-            $this->error('Please specify --tenant=ID or --all');
-            return 1;
+            $tenantSelection = $this->selectTenantForMaintenance();
+            
+            if ($tenantSelection === 'all') {
+                $applyToAll = true;
+            } elseif ($tenantSelection === 'cancel') {
+                $this->info('Operation cancelled');
+                return 0;
+            } else {
+                $tenantId = $tenantSelection;
+            }
         }
 
-        $options = [
-            'message' => $this->option('message') ?: 'This tenant is temporarily unavailable for maintenance.',
-            'allowed_ips' => $this->option('allowed-ips') ? explode(',', $this->option('allowed-ips')) : [],
-            'bypass_key' => $this->option('bypass-key'),
-            'retry_after' => $this->option('retry-after') ? (int) $this->option('retry-after') : 3600,
-            'admin_contact' => $this->option('admin-contact'),
-        ];
+        // Get maintenance options interactively
+        $options = $this->getMaintenanceOptions();
+
+        // Confirmation
+        if (!$autoAccept) {
+            if ($applyToAll) {
+                if (!$this->confirm('⚠️  Enable maintenance mode for ALL tenants?', false)) {
+                    $this->info('Operation cancelled');
+                    return 0;
+                }
+            } else {
+                if (!$this->confirm("Enable maintenance mode for tenant: {$tenantId}?", true)) {
+                    $this->info('Operation cancelled');
+                    return 0;
+                }
+            }
+        }
 
         if ($applyToAll) {
             return $this->enableMaintenanceForAll($options);
         } else {
             return $this->enableMaintenanceForTenant($tenantId, $options);
         }
+    }
+
+    /**
+     * Interactive tenant selection for maintenance
+     */
+    protected function selectTenantForMaintenance()
+    {
+        $this->info('📋 Select Tenant for Maintenance');
+        $this->line('');
+
+        // Get all tenants
+        $tenants = Tenant::select('id', 'name', 'data')->get();
+        
+        if ($tenants->isEmpty()) {
+            $this->error('No tenants found');
+            return 'cancel';
+        }
+
+        // Display tenants in a nice table
+        $this->displayTenantsTable($tenants);
+
+        $this->info('Available options:');
+        $this->line('  [all] 🌐 ALL TENANTS');
+        $this->line('  [cancel] ❌ Cancel Operation');
+        $this->newLine();
+
+        // Add individual tenants
+        foreach ($tenants as $index => $tenant) {
+            $name = $tenant->name ?? 'Unnamed';
+            $domains = $this->getTenantDomains($tenant);
+            $domain = $domains[0] ?? 'No domain';
+            
+            $this->line("  [{$index}] {$name} ({$domain})");
+        }
+
+        $this->newLine();
+        $choice = $this->ask('Select option by number or type "all"/"cancel"', 'cancel');
+
+        if ($choice === 'all') {
+            return 'all';
+        } elseif ($choice === 'cancel') {
+            return 'cancel';
+        } elseif (is_numeric($choice) && isset($tenants[$choice])) {
+            return $tenants[$choice]->id;
+        } else {
+            $this->error('Invalid selection.');
+            return $this->selectTenantForMaintenance();
+        }
+    }
+
+    /**
+     * Display tenants in a formatted table
+     */
+    protected function displayTenantsTable($tenants)
+    {
+        $tableData = [];
+        
+        foreach ($tenants as $index => $tenant) {
+            $name = $tenant->name ?? 'Unnamed';
+            $domains = $this->getTenantDomains($tenant);
+            $domain = $domains[0] ?? 'No domain';
+            $database = $tenant->database ?? 'N/A';
+            
+            // Check if in maintenance
+            $status = $this->maintenanceService->isInMaintenanceMode($tenant->id) ? '🔧 MAINTENANCE' : '✅ Active';
+            
+            $tableData[] = [
+                $index,
+                $name,
+                $domain,
+                $database,
+                substr($tenant->id, 0, 8) . '...',
+                $status
+            ];
+        }
+
+        $this->table(
+            ['#', 'Name', 'Domain', 'Database', 'ID', 'Status'],
+            $tableData
+        );
+        
+        $this->newLine();
+    }
+
+    /**
+     * Get tenant domains from data
+     */
+    protected function getTenantDomains($tenant)
+    {
+        $data = is_array($tenant->data) ? $tenant->data : [];
+        return $data['domains'] ?? [];
+    }
+
+    /**
+     * Get maintenance options interactively
+     */
+    protected function getMaintenanceOptions()
+    {
+        $this->info('🛠️  Maintenance Configuration');
+        $this->line('');
+
+        // Get message
+        $message = $this->option('message') ?: $this->ask(
+            'Maintenance message',
+            'This tenant is temporarily unavailable for maintenance.'
+        );
+
+        // Get retry after
+        $retryAfter = $this->option('retry-after') ?: $this->ask(
+            'Retry after (seconds)',
+            '3600'
+        );
+
+        // Optional configurations
+        $configureAdvanced = $this->confirm('Configure advanced options? (IPs, bypass key, contact)', false);
+        
+        $allowedIps = [];
+        $bypassKey = null;
+        $adminContact = null;
+
+        if ($configureAdvanced) {
+            // Allowed IPs
+            $ipsInput = $this->option('allowed-ips') ?: $this->ask('Allowed IPs (comma-separated, leave empty for none)');
+            if ($ipsInput) {
+                $allowedIps = array_map('trim', explode(',', $ipsInput));
+            }
+
+            // Bypass key
+            $bypassKey = $this->option('bypass-key') ?: $this->ask('Bypass key (leave empty for none)');
+
+            // Admin contact
+            $adminContact = $this->option('admin-contact') ?: $this->ask('Admin contact info (leave empty for none)');
+        }
+
+        return [
+            'message' => $message,
+            'allowed_ips' => $allowedIps,
+            'bypass_key' => $bypassKey,
+            'retry_after' => (int) $retryAfter,
+            'admin_contact' => $adminContact,
+        ];
     }
 
     /**
@@ -146,16 +359,45 @@ class TenantMaintenanceModeCommand extends Command
     }
 
     /**
-     * Disable maintenance mode
+     * Disable maintenance mode - Interactive version
      */
     protected function disableMaintenance()
     {
+        $this->info('✅ Disable Maintenance Mode');
+        $this->line('=========================');
+        $this->newLine();
+
         $tenantId = $this->option('tenant');
         $applyToAll = $this->option('all');
+        $autoAccept = $this->option('auto-accept');
 
+        // Interactive tenant selection if not specified
         if (!$tenantId && !$applyToAll) {
-            $this->error('Please specify --tenant=ID or --all');
-            return 1;
+            $tenantSelection = $this->selectTenantForDisabling();
+            
+            if ($tenantSelection === 'all') {
+                $applyToAll = true;
+            } elseif ($tenantSelection === 'cancel') {
+                $this->info('Operation cancelled');
+                return 0;
+            } else {
+                $tenantId = $tenantSelection;
+            }
+        }
+
+        // Confirmation
+        if (!$autoAccept) {
+            if ($applyToAll) {
+                if (!$this->confirm('⚠️  Disable maintenance mode for ALL tenants?', false)) {
+                    $this->info('Operation cancelled');
+                    return 0;
+                }
+            } else {
+                if (!$this->confirm("Disable maintenance mode for tenant: {$tenantId}?", true)) {
+                    $this->info('Operation cancelled');
+                    return 0;
+                }
+            }
         }
 
         if ($applyToAll) {
@@ -163,6 +405,100 @@ class TenantMaintenanceModeCommand extends Command
         } else {
             return $this->disableMaintenanceForTenant($tenantId);
         }
+    }
+
+    /**
+     * Interactive tenant selection for disabling maintenance
+     */
+    protected function selectTenantForDisabling()
+    {
+        $this->info('📋 Select Tenant to Disable Maintenance');
+        $this->line('');
+
+        // Get tenants currently in maintenance
+        $tenantsInMaintenance = $this->maintenanceService->getTenantsInMaintenance();
+        
+        if (empty($tenantsInMaintenance)) {
+            $this->warn('No tenants are currently in maintenance mode');
+            return 'cancel';
+        }
+
+        // Get all tenants for full display
+        $allTenants = Tenant::select('id', 'name', 'data')->get();
+        
+        // Display all tenants with maintenance status
+        $this->displayTenantsTableWithMaintenanceStatus($allTenants);
+
+        $this->info('Available options:');
+        $this->line('  [all] 🌐 ALL TENANTS (disable all)');
+        $this->line('  [cancel] ❌ Cancel Operation');
+        $this->newLine();
+
+        // Add tenants in maintenance
+        $maintenanceIndex = 0;
+        foreach ($tenantsInMaintenance as $tenantData) {
+            $tenant = $allTenants->firstWhere('id', $tenantData['id']);
+            if ($tenant) {
+                $name = $tenant->name ?? 'Unnamed';
+                $domains = $this->getTenantDomains($tenant);
+                $domain = $domains[0] ?? 'No domain';
+                
+                $this->line("  [{$maintenanceIndex}] 🔧 {$name} ({$domain}) - IN MAINTENANCE");
+                $maintenanceIndex++;
+            }
+        }
+
+        $this->newLine();
+        $choice = $this->ask('Select option by number or type "all"/"cancel"', 'cancel');
+
+        if ($choice === 'all') {
+            return 'all';
+        } elseif ($choice === 'cancel') {
+            return 'cancel';
+        } elseif (is_numeric($choice) && isset($tenantsInMaintenance[$choice])) {
+            return $tenantsInMaintenance[$choice]['id'];
+        } else {
+            $this->error('Invalid selection.');
+            return $this->selectTenantForDisabling();
+        }
+    }
+
+    /**
+     * Display tenants table with maintenance status
+     */
+    protected function displayTenantsTableWithMaintenanceStatus($tenants)
+    {
+        $tableData = [];
+        $maintenanceIndex = 0;
+        
+        foreach ($tenants as $tenant) {
+            $name = $tenant->name ?? 'Unnamed';
+            $domains = $this->getTenantDomains($tenant);
+            $domain = $domains[0] ?? 'No domain';
+            $database = $tenant->database ?? 'N/A';
+            
+            $isInMaintenance = $this->maintenanceService->isInMaintenanceMode($tenant->id);
+            $status = $isInMaintenance ? '🔧 MAINTENANCE' : '✅ Active';
+            $index = $isInMaintenance ? $maintenanceIndex++ : '-';
+            
+            $tableData[] = [
+                $index,
+                $name,
+                $domain,
+                $database,
+                substr($tenant->id, 0, 8) . '...',
+                $status
+            ];
+        }
+
+        $this->table(
+            ['#', 'Name', 'Domain', 'Database', 'ID', 'Status'],
+            $tableData
+        );
+        
+        $this->newLine();
+        $this->info('Only tenants in MAINTENANCE mode can be selected for disabling');
+        $this->newLine();
     }
 
     /**
@@ -221,29 +557,34 @@ class TenantMaintenanceModeCommand extends Command
     }
 
     /**
-     * Show maintenance status for tenant
+     * Show maintenance status - Interactive version
      */
     protected function showStatus()
     {
+        $this->info('📊 Maintenance Status Check');
+        $this->line('========================');
+        $this->newLine();
+
         $tenantId = $this->option('tenant');
 
+        // Interactive tenant selection if not specified
         if (!$tenantId) {
-            $this->error('Please specify --tenant=ID');
-            return 1;
+            $tenantId = $this->selectTenantForStatus();
+            
+            if ($tenantId === 'cancel') {
+                $this->info('Operation cancelled');
+                return 0;
+            }
         }
 
         $this->info("Maintenance status for tenant: {$tenantId}");
+        $this->line('');
 
         $inMaintenance = $this->maintenanceService->isInMaintenanceMode($tenantId);
 
         if ($inMaintenance) {
             $this->line("   🔧 Status: IN MAINTENANCE");
-            
-            // Get maintenance data for details
-            $maintenanceData = $this->maintenanceService->getMaintenanceData($tenantId);
-            if ($maintenanceData) {
-                $this->displayMaintenanceDetails($maintenanceData);
-            }
+            $this->line("   ⏰ Since: " . now()->toDateTimeString());
         } else {
             $this->line("   ✅ Status: ACTIVE");
         }
@@ -252,39 +593,204 @@ class TenantMaintenanceModeCommand extends Command
     }
 
     /**
-     * List all tenants in maintenance mode
+     * Interactive tenant selection for status check
+     */
+    protected function selectTenantForStatus()
+    {
+        $this->info('📋 Select Tenant for Status Check');
+        $this->line('');
+
+        $tenants = Tenant::select('id', 'name', 'data')->get();
+        
+        if ($tenants->isEmpty()) {
+            $this->error('No tenants found');
+            return 'cancel';
+        }
+
+        $this->displayTenantsTable($tenants);
+
+        $this->info('Available options:');
+        $this->line('  [cancel] ❌ Cancel Operation');
+        $this->newLine();
+
+        foreach ($tenants as $index => $tenant) {
+            $name = $tenant->name ?? 'Unnamed';
+            $domains = $this->getTenantDomains($tenant);
+            $domain = $domains[0] ?? 'No domain';
+            
+            $this->line("  [{$index}] {$name} ({$domain})");
+        }
+
+        $this->newLine();
+        $choice = $this->ask('Select tenant by number or type "cancel"', 'cancel');
+
+        if ($choice === 'cancel') {
+            return 'cancel';
+        } elseif (is_numeric($choice) && isset($tenants[$choice])) {
+            return $tenants[$choice]->id;
+        } else {
+            $this->error('Invalid selection.');
+            return $this->selectTenantForStatus();
+        }
+    }
+
+    /**
+     * List all tenants in maintenance mode - Enhanced version
      */
     protected function listTenantsInMaintenance()
     {
-        $this->info("Tenants currently in maintenance mode:");
+        $this->info('📋 Tenants in Maintenance Mode');
+        $this->line('=============================');
+        $this->newLine();
 
         $tenantsInMaintenance = $this->maintenanceService->getTenantsInMaintenance();
 
         if (empty($tenantsInMaintenance)) {
-            $this->line("   No tenants are currently in maintenance mode");
+            $this->line("   ✅ No tenants are currently in maintenance mode");
+            $this->newLine();
+            
+            // Offer to show all tenants
+            if ($this->confirm('Would you like to see all tenants?', false)) {
+                $this->showAllTenantsStatus();
+            }
+            
             return 0;
         }
 
-        $this->line('');
-        foreach ($tenantsInMaintenance as $tenantData) {
-            $this->line("🔧 {$tenantData['id']}");
+        // Display maintenance tenants in table format
+        $tableData = [];
+        foreach ($tenantsInMaintenance as $index => $tenantData) {
+            $tenant = Tenant::find($tenantData['id']);
+            $name = $tenant ? ($tenant->name ?? 'Unnamed') : 'Unknown';
+            $domains = $tenant ? $this->getTenantDomains($tenant) : [];
+            $domain = $domains[0] ?? 'No domain';
+            
+            $tableData[] = [
+                $index,
+                $name,
+                $domain,
+                substr($tenantData['id'], 0, 12) . '...',
+                'MAINTENANCE'
+            ];
+        }
+
+        $this->table(
+            ['#', 'Name', 'Domain', 'Tenant ID', 'Status'],
+            $tableData
+        );
+
+        $this->newLine();
+        $this->info("Total: " . count($tenantsInMaintenance) . " tenants in maintenance mode");
+        $this->newLine();
+
+        // Interactive options
+        $this->offerMaintenanceActions($tenantsInMaintenance);
+
+        return 0;
+    }
+
+    /**
+     * Show all tenants with their status
+     */
+    protected function showAllTenantsStatus()
+    {
+        $this->info('📊 All Tenants Status');
+        $this->line('==================');
+        $this->newLine();
+
+        $tenants = Tenant::select('id', 'name', 'data')->get();
+        $this->displayTenantsTable($tenants);
+    }
+
+    /**
+     * Offer interactive actions for maintenance management
+     */
+    protected function offerMaintenanceActions($tenantsInMaintenance)
+    {
+        if (empty($tenantsInMaintenance)) {
+            return;
+        }
+
+        $this->info('What would you like to do?');
+        $this->line('  [0] ✅ Disable maintenance for ALL tenants');
+        $this->line('  [1] 🎯 Disable maintenance for specific tenant');
+        $this->line('  [2] 🔍 Show detailed maintenance info');
+        $this->line('  [3] ❌ Nothing, just exit');
+        $this->newLine();
+
+        $choice = $this->ask('Select option by number', '3');
+
+        switch ($choice) {
+            case '0':
+                if ($this->confirm('⚠️  Disable maintenance mode for ALL tenants?', false)) {
+                    $this->disableMaintenanceForAll();
+                }
+                break;
+
+            case '1':
+                $this->selectAndDisableSpecificTenant($tenantsInMaintenance);
+                break;
+
+            case '2':
+                $this->showDetailedMaintenanceInfo($tenantsInMaintenance);
+                break;
+
+            default:
+                $this->info('Operation completed');
+                break;
+        }
+    }
+
+    /**
+     * Select and disable maintenance for specific tenant
+     */
+    protected function selectAndDisableSpecificTenant($tenantsInMaintenance)
+    {
+        $this->info('Select tenant to disable maintenance:');
+        $this->line('  [cancel] ❌ Cancel');
+        $this->newLine();
+        
+        foreach ($tenantsInMaintenance as $index => $tenantData) {
+            $tenant = Tenant::find($tenantData['id']);
+            $name = $tenant ? ($tenant->name ?? 'Unnamed') : 'Unknown';
+            $this->line("  [{$index}] {$name} ({$tenantData['id']})");
+        }
+
+        $this->newLine();
+        $choice = $this->ask('Select tenant by number or type "cancel"', 'cancel');
+        
+        if ($choice === 'cancel') {
+            return;
+        } elseif (is_numeric($choice) && isset($tenantsInMaintenance[$choice])) {
+            $selected = $tenantsInMaintenance[$choice]['id'];
+            if ($this->confirm("Disable maintenance for tenant: {$selected}?", true)) {
+                $this->disableMaintenanceForTenant($selected);
+            }
+        } else {
+            $this->error('Invalid selection.');
+            $this->selectAndDisableSpecificTenant($tenantsInMaintenance);
+        }
+    }
+
+    /**
+     * Show detailed maintenance information
+     */
+    protected function showDetailedMaintenanceInfo($tenantsInMaintenance)
+    {
+        foreach ($tenantsInMaintenance as $index => $tenantData) {
+            $this->line('');
+            $this->info("🔧 Tenant: {$tenantData['id']}");
+            $this->line("   Status: IN MAINTENANCE");
+            $this->line("   Since: " . now()->toDateTimeString());
             
             if (!empty($tenantData['maintenance_data'])) {
                 $data = $tenantData['maintenance_data'];
-                $this->line("   Message: {$data['message']}");
-                $this->line("   Enabled at: {$data['enabled_at']}");
-                
-                if (!empty($data['admin_contact'])) {
-                    $this->line("   Contact: {$data['admin_contact']}");
+                if (isset($data['message'])) {
+                    $this->line("   Message: {$data['message']}");
                 }
             }
-            
-            $this->line('');
         }
-
-        $this->info("Total: " . count($tenantsInMaintenance) . " tenants in maintenance mode");
-
-        return 0;
+        $this->newLine();
     }
 
     /**
@@ -293,6 +799,7 @@ class TenantMaintenanceModeCommand extends Command
     protected function displayMaintenanceInfo(string $tenantId, array $options)
     {
         $this->line('');
+        $this->info('🔧 Maintenance Mode Enabled Successfully!');
         $this->line('Maintenance Mode Details:');
         $this->line("  Message: {$options['message']}");
         
@@ -312,28 +819,5 @@ class TenantMaintenanceModeCommand extends Command
         }
         
         $this->line('');
-    }
-
-    /**
-     * Display detailed maintenance info
-     */
-    protected function displayMaintenanceDetails(array $maintenanceData)
-    {
-        $this->line("   Message: {$maintenanceData['message']}");
-        $this->line("   Enabled at: {$maintenanceData['enabled_at']}");
-        
-        if (!empty($maintenanceData['allowed_ips'])) {
-            $this->line("   Allowed IPs: " . implode(', ', $maintenanceData['allowed_ips']));
-        }
-        
-        if (!empty($maintenanceData['bypass_key'])) {
-            $this->line("   Bypass Key: {$maintenanceData['bypass_key']}");
-        }
-        
-        $this->line("   Retry After: {$maintenanceData['retry_after']} seconds");
-        
-        if (!empty($maintenanceData['admin_contact'])) {
-            $this->line("   Admin Contact: {$maintenanceData['admin_contact']}");
-        }
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\Testing;
+namespace ArtflowStudio\Tenancy\Commands\Testing\System;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;

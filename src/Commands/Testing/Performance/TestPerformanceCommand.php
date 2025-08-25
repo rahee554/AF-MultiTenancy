@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\Testing;
+namespace ArtflowStudio\Tenancy\Commands\Testing\Performance;
 
 use Illuminate\Console\Command;
 use ArtflowStudio\Tenancy\Models\Tenant;
@@ -446,7 +446,14 @@ class TestPerformanceCommand extends Command
             return null;
         }
 
+        // Calculate total operations for progress tracking
+        $totalOperations = $allTenants->count() * $opsPerTenant;
+        $progressBar = $this->output->createProgressBar($totalOperations);
+        $progressBar->setFormat(' %current%/%max% [%bar%] %percent:3s%% %elapsed:6s%/%estimated:-6s% %memory:6s% | %message%');
+        $progressBar->setMessage('Preparing tables...');
+
         // Step 1: Prepare users table in all tenants (if not exists)
+        $this->info('Preparing user tables for testing...');
         foreach ($allTenants as $tenant) {
             $tenant->run(function () use ($tenant) {
                 if (!DB::getSchemaBuilder()->hasTable('users')) {
@@ -464,70 +471,128 @@ class TestPerformanceCommand extends Command
             });
         }
 
-        $this->info("Simulating {$concurrentUsers} concurrent users per tenant, {$opsPerTenant} operations each...");
-        $summary = [];
-        $isolationPassed = true;
+        $this->newLine();
+        $this->info("Simulating {$concurrentUsers} concurrent users, randomized across {$allTenants->count()} tenants...");
+        $progressBar->start();
+        
+        // Initialize tracking arrays for each tenant
+        $tenantStats = [];
         foreach ($allTenants as $tenant) {
-            $creates = $reads = $updates = $deletes = 0;
-            $userIds = [];
-            $opStart = microtime(true);
-            for ($i = 0; $i < $opsPerTenant; $i++) {
-                $op = rand(1, 4); // 1: create, 2: read, 3: update, 4: delete
-                $email = 'testuser_' . uniqid() . '@example.com';
-                $name = 'User_' . bin2hex(random_bytes(3));
-                $password = bcrypt('password');
-                $now = now();
-                $tenant->run(function () use ($op, &$userIds, $tenant, $email, $name, $password, $now, &$creates, &$reads, &$updates, &$deletes) {
-                    switch ($op) {
-                        case 1: // Create
-                            $id = DB::table('users')->insertGetId([
-                                'name' => $name,
-                                'email' => $email,
-                                'password' => $password,
-                                'created_at' => $now,
-                                'updated_at' => $now,
+            $tenantStats[$tenant->id] = [
+                'creates' => 0,
+                'reads' => 0,
+                'updates' => 0,
+                'deletes' => 0,
+                'userIds' => [],
+                'tenant' => $tenant
+            ];
+        }
+        
+        // Create randomized operation schedule
+        $operations = [];
+        for ($i = 0; $i < $totalOperations; $i++) {
+            $tenant = $allTenants->random();
+            $operations[] = [
+                'tenant_id' => $tenant->id,
+                'tenant' => $tenant,
+                'operation' => rand(1, 4), // 1: create, 2: read, 3: update, 4: delete
+                'email' => 'testuser_' . uniqid() . '@example.com',
+                'name' => 'User_' . bin2hex(random_bytes(3)),
+                'password' => bcrypt('password'),
+                'timestamp' => now()
+            ];
+        }
+        
+        // Shuffle operations for true randomization
+        shuffle($operations);
+        
+        $isolationPassed = true;
+        $operationCount = 0;
+        $testStart = microtime(true);
+        
+        // Execute randomized operations
+        foreach ($operations as $operation) {
+            $tenant = $operation['tenant'];
+            $op = $operation['operation'];
+            $tenantId = $operation['tenant_id'];
+            
+            $progressBar->setMessage("Op " . ($operationCount + 1) . ": " . 
+                ['', 'CREATE', 'READ', 'UPDATE', 'DELETE'][$op] . 
+                " on {$tenant->name}");
+            
+            $tenant->run(function () use ($op, &$tenantStats, $tenantId, $operation) {
+                switch ($op) {
+                    case 1: // Create
+                        $id = DB::table('users')->insertGetId([
+                            'name' => $operation['name'],
+                            'email' => $operation['email'],
+                            'password' => $operation['password'],
+                            'created_at' => $operation['timestamp'],
+                            'updated_at' => $operation['timestamp'],
+                        ]);
+                        $tenantStats[$tenantId]['userIds'][] = $id;
+                        $tenantStats[$tenantId]['creates']++;
+                        break;
+                        
+                    case 2: // Read
+                        $user = DB::table('users')->inRandomOrder()->first();
+                        $tenantStats[$tenantId]['reads']++;
+                        break;
+                        
+                    case 3: // Update
+                        $user = DB::table('users')->inRandomOrder()->first();
+                        if ($user) {
+                            DB::table('users')->where('id', $user->id)->update([
+                                'name' => $operation['name'],
+                                'updated_at' => $operation['timestamp'],
                             ]);
-                            $userIds[] = $id;
-                            $creates++;
-                            break;
-                        case 2: // Read
-                            $user = DB::table('users')->inRandomOrder()->first();
-                            $reads++;
-                            break;
-                        case 3: // Update
-                            $user = DB::table('users')->inRandomOrder()->first();
-                            if ($user) {
-                                DB::table('users')->where('id', $user->id)->update([
-                                    'name' => $name,
-                                    'updated_at' => $now,
-                                ]);
-                                $updates++;
-                            }
-                            break;
-                        case 4: // Delete
-                            $user = DB::table('users')->inRandomOrder()->first();
-                            if ($user) {
-                                DB::table('users')->where('id', $user->id)->delete();
-                                $deletes++;
-                            }
-                            break;
-                    }
-                });
+                        }
+                        $tenantStats[$tenantId]['updates']++;
+                        break;
+                        
+                    case 4: // Delete
+                        $user = DB::table('users')->inRandomOrder()->first();
+                        if ($user) {
+                            DB::table('users')->where('id', $user->id)->delete();
+                        }
+                        $tenantStats[$tenantId]['deletes']++;
+                        break;
+                }
+            });
+            
+            // Update progress
+            $operationCount++;
+            $progressBar->advance();
+            
+            // Add small random delay to simulate real-world usage
+            if ($operationCount % 20 === 0) {
+                usleep(rand(1000, 5000)); // 1-5ms delay every 20 operations
             }
-            $opTime = microtime(true) - $opStart;
-            // Check final user count and persistence
+        }
+
+        $progressBar->setMessage('Verifying data isolation...');
+        $progressBar->finish();
+        $this->newLine();
+        
+        $testDuration = microtime(true) - $testStart;
+
+        // Collect final statistics for each tenant
+        $summary = [];
+        foreach ($tenantStats as $tenantId => $stats) {
+            $tenant = $stats['tenant'];
             $finalCount = $tenant->run(function () {
                 return DB::table('users')->count();
             });
             $persisted = $tenant->run(function () {
                 return DB::table('users')->exists();
             });
+            
             $summary[] = [
-                $tenant->id,
-                $creates,
-                $reads,
-                $updates,
-                $deletes,
+                $tenantId,
+                $stats['creates'],
+                $stats['reads'],
+                $stats['updates'],
+                $stats['deletes'],
                 $finalCount,
                 $persisted ? 'YES' : 'NO',
             ];
@@ -552,11 +617,16 @@ class TestPerformanceCommand extends Command
                 }
             });
         }
+        
         if ($isolationPassed) {
             $this->info('✅ Deep concurrent CRUD isolation PASSED: No cross-tenant user data leakage detected.');
         } else {
             $this->error('❌ Deep concurrent CRUD isolation FAILED: Cross-tenant user data leakage detected!');
         }
+        
+        $this->info("⚡ Randomized concurrent testing completed in " . round($testDuration, 2) . "s");
+        $this->info("📊 Operations per second: " . round($totalOperations / $testDuration, 2));
+        
         return $summary;
     }
 

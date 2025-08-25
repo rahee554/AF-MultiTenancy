@@ -30,8 +30,9 @@ use ArtflowStudio\Tenancy\Http\Controllers\RealTimeMonitoringController;
 // Get middleware config once at the top
 $middleware = config('artflow-tenancy.middleware', [
     'ui' => ['web'],
-    'api' => ['tenancy.api'],
-    'admin' => ['web'],
+    'api' => ['api'],
+    'admin' => ['web', 'auth'],
+    'tenant' => ['tenant.web'],
 ]);
 
 // ========================================

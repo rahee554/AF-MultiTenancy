@@ -38,46 +38,29 @@ class TenancyServiceProvider extends ServiceProvider
                 
                 // Core Commands
                 Commands\Core\CreateTenantCommand::class,
+                Commands\Core\DeleteTenantCommand::class,
                 Commands\Core\SwitchCacheDriverCommand::class,
                 Commands\Core\FindUnusedFilesCommand::class,
-                
-                // Tenant Management Commands
-                Commands\Tenancy\TenantCommand::class,
+                Commands\Core\SyncFastPanelDatabaseCommand::class,
                 
                 // Database Commands
                 Commands\Database\TenantDatabaseCommand::class,
+                Commands\Database\CheckPrivilegesCommand::class,
+                Commands\Database\DebugTenantConnectionCommand::class,
+                Commands\Database\DiagnoseDatabaseCommand::class,
+                Commands\Database\FixTenantDatabasesCommand::class,
+                Commands\Database\TenantConnectionTestCommand::class,
+                Commands\Database\TenantConnectionPoolCommand::class,
                 
-                // Main Testing Command
-                Commands\Testing\ComprehensiveTenancyTestCommand::class,
+                // Diagnostics Commands
+                Commands\Diagnostics\TenancyPerformanceDiagnosticCommand::class,
                 
-                // Auth Testing Commands
-                Commands\Testing\Auth\TestTenantAuthentication::class,
-                Commands\Testing\Auth\TestAuthContext::class,
-                Commands\Testing\Auth\DebugAuthenticationFlow::class,
-                Commands\Testing\Auth\TestSanctumCommand::class,
-                
-                // Database Testing Commands
-                Commands\Testing\Database\TenantIsolationTestCommand::class,
-                Commands\Testing\Database\FixTenantDatabasesCommand::class,
-                Commands\Testing\Database\TestCachedLookupCommand::class,
-                
-                // Performance Testing Commands (if they exist)
-                Commands\Testing\Performance\TestPerformanceCommand::class,
-                Commands\Testing\Performance\EnhancedTestPerformanceCommand::class,
-                Commands\Testing\Performance\TenantStressTestCommand::class,
-                
-                // Redis Testing Commands (if they exist)
-                Commands\Testing\Redis\TestRedisCommand::class,
-                Commands\Testing\Redis\RedisStressTestCommand::class,
-                Commands\Testing\Redis\InstallRedisCommand::class,
-                Commands\Testing\Redis\EnableRedisCommand::class,
-                Commands\Testing\Redis\ConfigureRedisCommand::class,
-                
-                // System Testing Commands (if they exist)
-                Commands\Testing\System\TestSystemCommand::class,
-                Commands\Testing\System\ServerCompatibilityCommand::class,
-                Commands\Testing\System\ValidateTenancySystemCommand::class,
-                Commands\Testing\System\TestMiddlewareCommand::class,
+                // Tenancy Commands
+                Commands\Tenancy\TenantCommand::class,
+                Commands\Tenancy\CreateTestTenantsCommand::class,
+                Commands\Tenancy\CheckRouteConfigCommand::class,
+                Commands\Tenancy\FastPanelCommand::class,
+                Commands\Tenancy\LinkAssetsCommand::class,
                 
                 // FastPanel Commands
                 Commands\FastPanel\CreateTenantCommand::class,
@@ -89,11 +72,44 @@ class TenancyServiceProvider extends ServiceProvider
                 // Maintenance Commands
                 Commands\Maintenance\WarmUpCacheCommand::class,
                 Commands\Maintenance\HealthCheckCommand::class,
+                Commands\Maintenance\EnhancedHealthCheckCommand::class,
                 Commands\Maintenance\TenantMaintenanceModeCommand::class,
                 
                 // Backup Commands
                 Commands\Backup\TenantBackupCommand::class,
                 Commands\Backup\BackupManagementCommand::class,
+                
+                // Testing Commands - Master Test Suite
+                Commands\Testing\MasterTestCommand::class,
+                Commands\Testing\ComprehensiveTenancyTestCommand::class,
+                Commands\Testing\CreateTestTenantsCommand::class,
+                Commands\Testing\TenantTestManagerCommand::class,
+                
+                // Testing - Auth Commands
+                Commands\Testing\Auth\TestSanctumCommand::class,
+                
+                // Testing - Database Commands
+                Commands\Testing\Database\TenantIsolationTestCommand::class,
+                Commands\Testing\Database\FixTenantDatabasesCommand::class,
+                Commands\Testing\Database\TestCachedLookupCommand::class,
+                
+                // Testing - Performance Commands
+                Commands\Testing\Performance\TestPerformanceCommand::class,
+                Commands\Testing\Performance\EnhancedTestPerformanceCommand::class,
+                Commands\Testing\Performance\TenantStressTestCommand::class,
+                
+                // Testing - Redis Commands
+                Commands\Testing\Redis\TestRedisCommand::class,
+                Commands\Testing\Redis\RedisStressTestCommand::class,
+                Commands\Testing\Redis\InstallRedisCommand::class,
+                Commands\Testing\Redis\EnableRedisCommand::class,
+                Commands\Testing\Redis\ConfigureRedisCommand::class,
+                
+                // Testing - System Commands
+                Commands\Testing\System\TestSystemCommand::class,
+                Commands\Testing\System\ServerCompatibilityCommand::class,
+                Commands\Testing\System\ValidateTenancySystemCommand::class,
+                Commands\Testing\System\TestMiddlewareCommand::class,
             ]);
         }
 
@@ -118,10 +134,18 @@ class TenancyServiceProvider extends ServiceProvider
         // Register our services
         $this->app->singleton(TenantService::class);
         $this->app->singleton(TenantContextCache::class);
-        $this->app->singleton(Services\CachedTenantResolver::class);
         $this->app->singleton(Services\TenantMaintenanceMode::class);
         $this->app->singleton(Services\TenantSanctumService::class);
         $this->app->singleton(Services\TenantBackupService::class);
+        $this->app->singleton(Services\TenantPulseService::class);
+
+        // Bind stancl/tenancy contracts to prevent dependency injection errors
+        if (!$this->app->bound(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class)) {
+            $this->app->bind(
+                \Stancl\Tenancy\Contracts\TenantDatabaseManager::class,
+                \Stancl\Tenancy\Database\DatabaseManager::class
+            );
+        }
 
         // Register our event service provider
         $this->app->register(Providers\EventServiceProvider::class);

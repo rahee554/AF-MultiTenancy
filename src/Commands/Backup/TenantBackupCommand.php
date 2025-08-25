@@ -19,7 +19,10 @@ class TenantBackupCommand extends Command
                             {--compress : Compress backup files}
                             {--no-data : Backup structure only}
                             {--force : Force backup without confirmation}
-                            {--cleanup-days=30 : Days to keep backups}';
+                            {--cleanup-days=30 : Days to keep backups}
+                            {--method= : Backup method (mysqldump, mysql-client, php-export)}
+                            {--test-methods : Test all available backup methods}
+                            {--auto-detect : Auto-detect best available method}';
 
     protected $description = 'Comprehensive tenant database backup and restore system';
 
@@ -34,6 +37,11 @@ class TenantBackupCommand extends Command
     public function handle(): int
     {
         $action = $this->argument('action');
+
+        // Handle test methods option
+        if ($this->option('test-methods')) {
+            return $this->testBackupMethods();
+        }
 
         if (!$action) {
             return $this->showInteractiveMenu();
@@ -54,27 +62,145 @@ class TenantBackupCommand extends Command
         }
     }
 
+    /**
+     * Test all available backup methods
+     */
+    private function testBackupMethods(): int
+    {
+        $this->info('🧪 Testing Available Backup Methods...');
+        $this->newLine();
+
+        $methods = [
+            'mysqldump' => 'Test mysqldump binary availability',
+            'mysql-client' => 'Test mysql client binary availability', 
+            'php-export' => 'Test PHP-based SQL export (always available)',
+            'phpmyadmin' => 'Test phpMyAdmin-style export (PHP-based)'
+        ];
+
+        $results = [];
+
+        foreach ($methods as $method => $description) {
+            $this->info("Testing {$method}...");
+            $result = $this->testBackupMethod($method);
+            $status = $result['available'] ? '✅ Available' : '❌ Not Available';
+            $this->line("  {$status} - {$description}");
+            
+            if (!$result['available'] && isset($result['reason'])) {
+                $this->line("    Reason: {$result['reason']}");
+            }
+            
+            $results[$method] = $result;
+        }
+
+        $this->newLine();
+        $this->info('📋 Recommendation:');
+        $recommended = $this->getRecommendedMethod($results);
+        $this->info("Best available method: <fg=green>{$recommended}</fg=green>");
+
+        return 0;
+    }
+
+    /**
+     * Test a specific backup method
+     */
+    private function testBackupMethod(string $method): array
+    {
+        switch ($method) {
+            case 'mysqldump':
+                return $this->testMysqldump();
+            case 'mysql-client':
+                return $this->testMysqlClient();
+            case 'php-export':
+            case 'phpmyadmin':
+                return ['available' => true, 'reason' => 'PHP-based export always available'];
+            default:
+                return ['available' => false, 'reason' => 'Unknown method'];
+        }
+    }
+
+    /**
+     * Test mysqldump availability
+     */
+    private function testMysqldump(): array
+    {
+        $command = PHP_OS_FAMILY === 'Windows' ? 'where mysqldump' : 'which mysqldump';
+        
+        exec($command . ' 2>&1', $output, $returnCode);
+        
+        if ($returnCode === 0) {
+            // Test actual execution
+            exec('mysqldump --version 2>&1', $versionOutput, $versionCode);
+            if ($versionCode === 0) {
+                return ['available' => true, 'version' => $versionOutput[0] ?? 'Unknown'];
+            }
+        }
+        
+        return ['available' => false, 'reason' => 'mysqldump binary not found in PATH'];
+    }
+
+    /**
+     * Test mysql client availability
+     */
+    private function testMysqlClient(): array
+    {
+        $command = PHP_OS_FAMILY === 'Windows' ? 'where mysql' : 'which mysql';
+        
+        exec($command . ' 2>&1', $output, $returnCode);
+        
+        if ($returnCode === 0) {
+            // Test actual execution
+            exec('mysql --version 2>&1', $versionOutput, $versionCode);
+            if ($versionCode === 0) {
+                return ['available' => true, 'version' => $versionOutput[0] ?? 'Unknown'];
+            }
+        }
+        
+        return ['available' => false, 'reason' => 'mysql client binary not found in PATH'];
+    }
+
+    /**
+     * Get recommended backup method based on availability
+     */
+    private function getRecommendedMethod(array $results): string
+    {
+        // Priority order: mysqldump > mysql-client > php-export
+        $priority = ['mysqldump', 'mysql-client', 'phpmyadmin', 'php-export'];
+        
+        foreach ($priority as $method) {
+            if ($results[$method]['available']) {
+                return $method;
+            }
+        }
+        
+        return 'php-export'; // Fallback
+    }
+
     private function showInteractiveMenu(): int
     {
         $this->info('🗄️  Tenant Backup & Restore System');
         $this->newLine();
 
-        $action = $this->choice('What would you like to do?', [
-            'backup' => 'Create Backup',
-            'restore' => 'Restore from Backup',
-            'list' => 'List Backups',
-            'cleanup' => 'Cleanup Old Backups',
-        ], 'backup');
+        $this->info('What would you like to do?');
+        $this->line('  [0] 📦 Create Backup');
+        $this->line('  [1] 🔄 Restore from Backup'); 
+        $this->line('  [2] 📋 List Backups');
+        $this->line('  [3] 🧹 Cleanup Old Backups');
+        $this->newLine();
 
-        switch ($action) {
-            case 'backup':
+        $choice = $this->ask('Select option by number', '0');
+        
+        switch ($choice) {
+            case '0':
                 return $this->handleBackup();
-            case 'restore':
+            case '1':
                 return $this->handleRestore();
-            case 'list':
+            case '2':
                 return $this->handleList();
-            case 'cleanup':
+            case '3':
                 return $this->handleCleanup();
+            default:
+                $this->error('Invalid choice. Please select 0-3.');
+                return $this->showInteractiveMenu();
         }
 
         return 0;
@@ -181,13 +307,27 @@ class TenantBackupCommand extends Command
             return null;
         }
 
+        // Create numbered choices with better formatting
+        $this->info('Available tenants:');
+        $this->newLine();
+        
         $choices = [];
-        foreach ($tenants as $tenant) {
-            $choices[$tenant->id] = "{$tenant->id} - {$tenant->name}";
+        foreach ($tenants as $index => $tenant) {
+            $domain = $tenant->domains->first()->domain ?? 'no-domain';
+            $displayName = "{$tenant->name} - {$domain} ({$tenant->id})";
+            $choices[$index] = $displayName;
+            $this->line("  [{$index}] {$displayName}");
         }
 
-        $selectedId = $this->choice('Select a tenant:', $choices);
-        return Tenant::find($selectedId);
+        $this->newLine();
+        $choice = $this->ask('Select tenant by number', '0');
+        
+        if (!is_numeric($choice) || !isset($tenants[$choice])) {
+            $this->error('Invalid tenant selection.');
+            return null;
+        }
+
+        return $tenants[$choice];
     }
 
     private function selectBackup(array $backups): ?array
