@@ -12,7 +12,7 @@
                         <span class="bullet bg-gray-500 w-5px h-2px"></span>
                     </li>
                     <li class="breadcrumb-item text-muted">
-                        <a href="{{ route('tenancy.admin.index') }}" class="text-muted text-hover-primary">Tenants</a>
+                        <a href="{{ route('tenancy.admin.tenants.index') }}" class="text-muted text-hover-primary">Tenants</a>
                     </li>
                     <li class="breadcrumb-item">
                         <span class="bullet bg-gray-500 w-5px h-2px"></span>
@@ -21,7 +21,7 @@
                 </ul>
             </div>
             <div class="d-flex align-items-center gap-2 gap-lg-3">
-                <a href="{{ route('tenancy.admin.index') }}" class="btn btn-sm btn-light">
+                <a href="{{ route('tenancy.admin.tenants.index') }}" class="btn btn-sm btn-light">
                     <i class="ki-duotone ki-arrow-left fs-2">
                         <span class="path1"></span>
                         <span class="path2"></span>

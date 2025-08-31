@@ -162,7 +162,7 @@
                                                     </div>
                                                 </div>
                                                 <div class="d-flex justify-content-start flex-column">
-                                                    <a href="{{ route('tenancy.admin.view', $tenant) }}" class="text-gray-900 fw-bold text-hover-primary fs-6">{{ $tenant->name }}</a>
+                                                    <a href="{{ route('tenancy.admin.tenants.show', $tenant) }}" class="text-gray-900 fw-bold text-hover-primary fs-6">{{ $tenant->name }}</a>
                                                     <span class="text-muted fw-semibold text-muted d-block fs-7">ID: {{ $tenant->id }}</span>
                                                 </div>
                                             </div>
@@ -206,7 +206,7 @@
                                             <div class="menu menu-sub menu-sub-dropdown menu-column menu-rounded menu-gray-600 menu-state-bg-light-primary fw-semibold fs-7 w-125px py-4" data-kt-menu="true">
                                                 <!--begin::Menu item-->
                                                 <div class="menu-item px-3">
-                                                    <a href="{{ route('tenancy.admin.view', $tenant) }}" class="menu-link px-3">
+                                                    <a href="{{ route('tenancy.admin.tenants.show', $tenant) }}" class="menu-link px-3">
                                                         View Details
                                                     </a>
                                                 </div>

@@ -99,6 +99,9 @@ class InstallTenancyCommand extends Command
         // Update app.php to include our service provider
         $this->updateProviders();
 
+        // Auto-add tenant template to database.php
+        $this->addTenantTemplateToDatabase();
+
         // Update cache configuration for multi-tenancy
         $this->updateCacheConfig();
 
@@ -106,6 +109,75 @@ class InstallTenancyCommand extends Command
         $this->updateSessionConfig();
 
         $this->line('   ✓ Application configuration updated');
+    }
+
+    protected function addTenantTemplateToDatabase()
+    {
+        $databaseConfigPath = config_path('database.php');
+        
+        if (!File::exists($databaseConfigPath)) {
+            $this->warn('   ⚠️  database.php not found, skipping tenant template addition');
+            return;
+        }
+
+        $databaseConfig = File::get($databaseConfigPath);
+
+        // Enhanced check for tenant_template - check for both quoted and unquoted versions
+        if (str_contains($databaseConfig, "'tenant_template'") || 
+            str_contains($databaseConfig, '"tenant_template"') ||
+            str_contains($databaseConfig, 'tenant_template')) {
+            $this->line('   ✓ tenant_template connection already exists in database.php');
+            return;
+        }
+
+        // Find the mysql connection configuration
+        $mysqlPattern = "/('mysql'\s*=>\s*\[[\s\S]*?\],)/";
+        
+        if (preg_match($mysqlPattern, $databaseConfig, $matches)) {
+            $mysqlConfig = $matches[1];
+            
+            // Create tenant template configuration
+            $tenantTemplateConfig = "
+        'tenant_template' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => '', // This will be set dynamically by tenancy
+            'username' => env('DB_USERNAME', 'forge'),
+            'password' => env('DB_PASSWORD', ''),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+             'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_PERSISTENT => false, // CRITICAL: Must be FALSE for multi-tenancy
+                PDO::ATTR_EMULATE_PREPARES => false, // Better performance
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => false, // Reduce memory usage
+                PDO::ATTR_TIMEOUT => 10, // Shorter timeout for tenants
+                PDO::ATTR_STRINGIFY_FETCHES => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION sql_mode=\'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION\', SESSION wait_timeout=120, SESSION interactive_timeout=120',
+            ]) : [],
+        ],
+
+        ";
+
+            // Insert tenant template before mysql configuration
+            $updatedConfig = str_replace($mysqlConfig, $tenantTemplateConfig . $mysqlConfig, $databaseConfig);
+            
+            // Write the updated configuration back
+            File::put($databaseConfigPath, $updatedConfig);
+            
+            $this->line('   ✅ Added tenant_template connection to database.php');
+        } else {
+            $this->warn('   ⚠️  Could not find mysql connection in database.php - please add tenant_template manually');
+            $this->line('   📖 See installation docs for tenant_template configuration');
+        }
     }
 
     protected function updateProviders()

@@ -29,9 +29,20 @@ return [
      */
     'bootstrappers' => [
         Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper::class,
-        Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper::class,
+        
+        // Enhanced cache isolation (replaces CacheTenancyBootstrapper for better options)
+        ArtflowStudio\Tenancy\Bootstrappers\EnhancedCacheTenancyBootstrapper::class,
+        
+        // Session isolation - stores sessions in tenant database
+        ArtflowStudio\Tenancy\Bootstrappers\SessionTenancyBootstrapper::class,
+        
+        // Filesystem isolation
         // Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper::class, // Disabled temporarily for testing
+        
+        // Queue isolation
         Stancl\Tenancy\Bootstrappers\QueueTenancyBootstrapper::class,
+        
+        // Redis isolation (requires phpredis)
         // Stancl\Tenancy\Bootstrappers\RedisTenancyBootstrapper::class, // Note: phpredis is needed
     ],
 

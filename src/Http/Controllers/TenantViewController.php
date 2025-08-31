@@ -24,31 +24,8 @@ class TenantViewController extends Controller
      */
     public function dashboard()
     {
-        $stats = $this->tenantService->getSystemStats();
-        $systemInfo = $this->getSystemInfo();
-        $tenants = Tenant::with('domains')->get();
-        $recentTenants = Tenant::latest()->limit(5)->get();
-        
-        // Enhanced statistics
-        $enhancedStats = [
-            'total_tenants' => Tenant::count(),
-            'active_tenants' => Tenant::where('status', 'active')->count(),
-            'inactive_tenants' => Tenant::where('status', 'inactive')->count(),
-            'suspended_tenants' => Tenant::where('status', 'suspended')->count(),
-            'blocked_tenants' => Tenant::where('status', 'blocked')->count(),
-            'total_domains' => \Stancl\Tenancy\Database\Models\Domain::count(),
-            'total_connections' => $this->getTotalConnections(),
-            'persistent_connections' => $this->getPersistentConnections(),
-            'cache_size' => $this->getCacheSize(),
-            'active_users_per_tenant' => $this->getActiveUsersPerTenant(),
-            'database_sizes' => $this->getDatabaseSizes(),
-            'migration_status' => $this->getMigrationStatusForAllTenants(),
-            'last_activity' => $this->getLastActivity(),
-        ];
-        
-        $allStats = array_merge($stats, $enhancedStats);
-        
-        return view('admin.tenants.dashboard', compact('allStats', 'systemInfo', 'tenants', 'recentTenants'));
+        // Redirect to Livewire-powered admin dashboard
+        return redirect()->route('tenancy.admin.dashboard');
     }
 
     /**
@@ -56,9 +33,8 @@ class TenantViewController extends Controller
      */
     public function index()
     {
-        $tenants = Tenant::with('domains')->latest()->paginate(15);
-        
-        return view('admin.tenants.index', compact('tenants'));
+        // Redirect to Livewire-powered tenants index
+        return redirect()->route('tenancy.admin.index');
     }
 
     /**
@@ -130,16 +106,12 @@ class TenantViewController extends Controller
     }
 
     /**
-     * Show tenant details.
+     * Show a specific tenant.
      */
-    public function show($uuid)
+    public function show(string $id)
     {
-        $tenant = Tenant::with('domains')->where('uuid', $uuid)->firstOrFail();
-        
-        // Get tenant statistics
-        $stats = $this->getTenantStatistics($tenant);
-        
-        return view('admin.tenants.show', compact('tenant', 'stats'));
+        // Redirect to Livewire-powered tenant view
+        return redirect()->route('tenancy.admin.tenants.show', ['tenant' => $id]);
     }
 
     /**
@@ -517,4 +489,83 @@ class TenantViewController extends Controller
     private function getDatabaseSizes(): array { return []; }
     private function getMigrationStatusForAllTenants(): array { return []; }
     private function getLastActivity(): string { return '2 hours ago'; }
+
+    /**
+     * Display system health check.
+     */
+    public function health()
+    {
+        $healthChecks = [
+            'database' => $this->checkDatabaseConnection(),
+            'cache' => $this->checkCacheConnection(),
+            'storage' => $this->checkStorageAccess(),
+            'tenancy' => $this->checkTenancyStatus(),
+            'migrations' => $this->checkMigrations(),
+        ];
+
+        $overallStatus = collect($healthChecks)->every(fn($check) => $check['status'] === 'ok') ? 'healthy' : 'unhealthy';
+
+        return view('artflow-tenancy::health', [
+            'health_checks' => $healthChecks,
+            'overall_status' => $overallStatus,
+            'timestamp' => now(),
+        ]);
+    }
+
+    private function checkDatabaseConnection(): array
+    {
+        try {
+            DB::connection()->getPdo();
+            return ['status' => 'ok', 'message' => 'Database connection successful'];
+        } catch (\Exception $e) {
+            return ['status' => 'error', 'message' => 'Database connection failed: ' . $e->getMessage()];
+        }
+    }
+
+    private function checkCacheConnection(): array
+    {
+        try {
+            cache()->put('health_check', 'ok', 60);
+            $value = cache()->get('health_check');
+            return ['status' => $value === 'ok' ? 'ok' : 'error', 'message' => 'Cache is working'];
+        } catch (\Exception $e) {
+            return ['status' => 'error', 'message' => 'Cache connection failed: ' . $e->getMessage()];
+        }
+    }
+
+    private function checkStorageAccess(): array
+    {
+        try {
+            $testFile = 'health_check_' . time() . '.txt';
+            \Storage::disk('local')->put($testFile, 'test');
+            \Storage::disk('local')->delete($testFile);
+            return ['status' => 'ok', 'message' => 'Storage access working'];
+        } catch (\Exception $e) {
+            return ['status' => 'error', 'message' => 'Storage access failed: ' . $e->getMessage()];
+        }
+    }
+
+    private function checkTenancyStatus(): array
+    {
+        try {
+            $tenantCount = Tenant::count();
+            return ['status' => 'ok', 'message' => "Tenancy system operational ({$tenantCount} tenants)"];
+        } catch (\Exception $e) {
+            return ['status' => 'error', 'message' => 'Tenancy system error: ' . $e->getMessage()];
+        }
+    }
+
+    private function checkMigrations(): array
+    {
+        try {
+            // Check if migrations table exists and has records
+            if (Schema::hasTable('migrations')) {
+                $migrationCount = DB::table('migrations')->count();
+                return ['status' => 'ok', 'message' => "{$migrationCount} migrations applied"];
+            }
+            return ['status' => 'warning', 'message' => 'No migrations table found'];
+        } catch (\Exception $e) {
+            return ['status' => 'error', 'message' => 'Migration check failed: ' . $e->getMessage()];
+        }
+    }
 }

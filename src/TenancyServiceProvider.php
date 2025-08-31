@@ -15,8 +15,9 @@ class TenancyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->loadRoutesFrom(__DIR__ . '/../routes/af-tenancy.php');
-        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'af-tenancy');
+        $this->loadRoutesFrom(__DIR__ . '/../routes/af-admin.php');
+        $this->loadRoutesFrom(__DIR__ . '/../routes/af-admin-api.php');
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'artflow-tenancy');
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
 
         $this->publishes([
@@ -30,6 +31,17 @@ class TenancyServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../resources/views' => resource_path('views/vendor/af-tenancy'),
         ], 'af-tenancy-views');
+
+        // Publish migrations (excluding documentation and stubs)
+        $this->publishes([
+            __DIR__ . '/../database/migrations' => database_path('migrations'),
+        ], 'af-tenancy-migrations');
+
+        // Publish only essential files (excluding docs and stubs folders)
+        $this->publishes([
+            __DIR__ . '/../config/artflow-tenancy.php' => config_path('artflow-tenancy.php'),
+            __DIR__ . '/../config/tenancy.php' => config_path('tenancy.php'),
+        ], 'af-tenancy-essential');
 
         if ($this->app->runningInConsole()) {
             $this->commands([
@@ -110,12 +122,24 @@ class TenancyServiceProvider extends ServiceProvider
                 Commands\Testing\System\ServerCompatibilityCommand::class,
                 Commands\Testing\System\ValidateTenancySystemCommand::class,
                 Commands\Testing\System\TestMiddlewareCommand::class,
+                
+                // Testing - API Commands
+                Commands\Testing\Api\TestApiEndpointsCommand::class,
+                Commands\Testing\Api\SimpleApiTestCommand::class,
+                Commands\Testing\Api\DetailedApiTestCommand::class,
+                
+                // Analytics Commands - NEW
+                Commands\Analytics\TenantAnalyticsCommand::class,
+                
+                // System Commands - NEW
+                Commands\System\CacheSetupCommand::class,
             ]);
         }
 
         $this->registerMiddleware();
         $this->configureLivewire();
         $this->configureRedis();
+        $this->loadViews();
     }
 
     /**
@@ -130,25 +154,76 @@ class TenancyServiceProvider extends ServiceProvider
         // Merge our configurations with stancl/tenancy
         $this->mergeConfigFrom(__DIR__ . '/../config/tenancy.php', 'tenancy');
         $this->mergeConfigFrom(__DIR__ . '/../config/artflow-tenancy.php', 'artflow-tenancy');
-
-        // Register our services
+        
+        // Register all services
+        $this->registerServices();
+    }
+    
+    /**
+     * Register all our enhanced services
+     */
+    private function registerServices()
+    {
+        // Register our core services
         $this->app->singleton(TenantService::class);
         $this->app->singleton(TenantContextCache::class);
         $this->app->singleton(Services\TenantMaintenanceMode::class);
         $this->app->singleton(Services\TenantSanctumService::class);
         $this->app->singleton(Services\TenantBackupService::class);
-        $this->app->singleton(Services\TenantPulseService::class);
+        // Note: TenantPulseService removed - using custom tenant analytics instead
+        
+        // Register new enhanced services
+        $this->app->singleton(Services\TenantAnalyticsService::class, function ($app) {
+            return new Services\TenantAnalyticsService();
+        });
+        
+        $this->app->singleton(Services\TenantResourceQuotaService::class, function ($app) {
+            return new Services\TenantResourceQuotaService();
+        });
+        
+        // Bind analytics service for convenience
+        $this->app->alias(Services\TenantAnalyticsService::class, 'tenant.analytics');
+        
+        // Bind quota service for convenience
+        $this->app->alias(Services\TenantResourceQuotaService::class, 'tenant.quotas');
 
-        // Bind stancl/tenancy contracts to prevent dependency injection errors
-        if (!$this->app->bound(\Stancl\Tenancy\Contracts\TenantDatabaseManager::class)) {
-            $this->app->bind(
-                \Stancl\Tenancy\Contracts\TenantDatabaseManager::class,
-                \Stancl\Tenancy\Database\DatabaseManager::class
-            );
-        }
+        // Register database managers for dependency injection
+        $this->registerDatabaseManagers();
 
         // Register our event service provider
         $this->app->register(Providers\EventServiceProvider::class);
+    }
+
+    /**
+     * Register tenant database managers
+     */
+    protected function registerDatabaseManagers(): void
+    {
+        // Register database managers that can be resolved from container
+        $this->app->bind(
+            \Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager::class,
+            \Stancl\Tenancy\TenantDatabaseManagers\MySQLDatabaseManager::class
+        );
+
+        $this->app->bind(
+            \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLDatabaseManager::class,
+            \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLDatabaseManager::class
+        );
+
+        $this->app->bind(
+            \Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager::class,
+            \Stancl\Tenancy\TenantDatabaseManagers\SQLiteDatabaseManager::class
+        );
+
+        $this->app->bind(
+            \Stancl\Tenancy\TenantDatabaseManagers\PermissionControlledMySQLDatabaseManager::class,
+            \Stancl\Tenancy\TenantDatabaseManagers\PermissionControlledMySQLDatabaseManager::class
+        );
+
+        $this->app->bind(
+            \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLSchemaManager::class,
+            \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLSchemaManager::class
+        );
     }
 
     /**
@@ -223,6 +298,15 @@ class TenancyServiceProvider extends ServiceProvider
     {
         if (class_exists(Livewire::class)) {
             $this->app->booted(function () {
+                // Register Livewire components
+                Livewire::component('tenancy.admin.dashboard', \ArtflowStudio\Tenancy\Http\Livewire\Admin\Dashboard::class);
+                Livewire::component('tenancy.admin.tenants-index', \ArtflowStudio\Tenancy\Http\Livewire\Admin\TenantsIndex::class);
+                Livewire::component('tenancy.admin.view-tenant', \ArtflowStudio\Tenancy\Http\Livewire\Admin\ViewTenant::class);
+                Livewire::component('tenancy.admin.create-tenant', \ArtflowStudio\Tenancy\Http\Livewire\Admin\CreateTenant::class);
+                Livewire::component('tenancy.admin.tenant-analytics', \ArtflowStudio\Tenancy\Http\Livewire\Admin\TenantAnalytics::class);
+                Livewire::component('tenancy.admin.queue-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\QueueMonitoring::class);
+                Livewire::component('tenancy.admin.system-monitoring', \ArtflowStudio\Tenancy\Http\Livewire\Admin\SystemMonitoring::class);
+                
                 // Livewire middleware for tenancy
                 Livewire::addPersistentMiddleware([
                     \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
@@ -278,5 +362,13 @@ class TenancyServiceProvider extends ServiceProvider
                 'cache.prefix' => config('artflow-tenancy.redis.central_prefix', 'central_'),
             ]);
         });
+    }
+
+    /**
+     * Load package views
+     */
+    protected function loadViews(): void
+    {
+        $this->loadViewsFrom(__DIR__ . '/../resources/views', 'af-tenancy');
     }
 }
