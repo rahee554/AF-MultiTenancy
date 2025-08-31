@@ -43,6 +43,12 @@ class TenancyServiceProvider extends ServiceProvider
             __DIR__ . '/../config/tenancy.php' => config_path('tenancy.php'),
         ], 'af-tenancy-essential');
 
+        // Publish public assets (css/js/media) so host applications can copy them
+        // into their public/vendor path via `php artisan vendor:publish --tag=af-tenancy-assets`.
+        $this->publishes([
+            __DIR__ . '/../public' => public_path('vendor/artflow-studio/tenancy'),
+        ], 'af-tenancy-assets');
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 // Installation Commands

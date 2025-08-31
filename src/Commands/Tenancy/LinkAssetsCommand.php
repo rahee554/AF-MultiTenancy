@@ -26,7 +26,8 @@ class LinkAssetsCommand extends Command
      */
     public function handle(): int
     {
-        $vendorPath = base_path('vendor/artflow-studio/tenancy/Public');
+        // NOTE: repository uses lowercase `public` folder. Use lowercase here to match.
+        $vendorPath = base_path('vendor/artflow-studio/tenancy/public');
         $publicPath = public_path('vendor/artflow-studio/tenancy');
 
         if (! File::exists($vendorPath)) {
@@ -40,40 +41,63 @@ class LinkAssetsCommand extends Command
             $this->info('Created directory: ' . $publicPath);
         }
 
-        $cssSource = $vendorPath . '/css';
-        $cssTarget = $publicPath . '/css';
-        $jsSource = $vendorPath . '/js';
-        $jsTarget = $publicPath . '/js';
+        // Define asset directories to link
+        $assetDirectories = ['css', 'js', 'media'];
+        $linkedDirectories = [];
 
-        // Check if already exists
-        if (File::exists($cssTarget) || File::exists($jsTarget)) {
-            if (! $this->option('force')) {
-                $this->error('Assets already exist! Use --force to overwrite.');
-                return 1;
+        // Check if any assets already exist
+        $existingAssets = [];
+        foreach ($assetDirectories as $dir) {
+            $targetPath = $publicPath . '/' . $dir;
+            if (File::exists($targetPath)) {
+                $existingAssets[] = $dir;
             }
-            
-            // Remove existing
-            if (File::exists($cssTarget)) {
-                File::deleteDirectory($cssTarget);
-            }
-            if (File::exists($jsTarget)) {
-                File::deleteDirectory($jsTarget);
+        }
+
+        if (!empty($existingAssets) && !$this->option('force')) {
+            $this->error('Assets already exist (' . implode(', ', $existingAssets) . ')! Use --force to overwrite.');
+            return 1;
+        }
+
+        // Remove existing assets if force option is used
+        if (!empty($existingAssets) && $this->option('force')) {
+            foreach ($existingAssets as $dir) {
+                $targetPath = $publicPath . '/' . $dir;
+                if (File::exists($targetPath)) {
+                    if (is_link($targetPath)) {
+                        unlink($targetPath);
+                    } else {
+                        File::deleteDirectory($targetPath);
+                    }
+                }
             }
         }
 
         try {
-            // For Windows, use junction instead of symlink for directories
-            if (PHP_OS_FAMILY === 'Windows') {
-                $this->createWindowsLink($cssSource, $cssTarget);
-                $this->createWindowsLink($jsSource, $jsTarget);
-            } else {
-                File::link($cssSource, $cssTarget);
-                File::link($jsSource, $jsTarget);
+            // Link each asset directory that exists in the vendor package
+            foreach ($assetDirectories as $dir) {
+                $sourcePath = $vendorPath . '/' . $dir;
+                $targetPath = $publicPath . '/' . $dir;
+
+                if (File::exists($sourcePath)) {
+                    // For Windows, use junction instead of symlink for directories
+                    if (PHP_OS_FAMILY === 'Windows') {
+                        $this->createWindowsLink($sourcePath, $targetPath);
+                    } else {
+                        File::link($sourcePath, $targetPath);
+                    }
+                    $linkedDirectories[] = $dir . ': ' . $targetPath;
+                }
             }
 
-            $this->info('Successfully linked Tenancy assets:');
-            $this->line('  CSS: ' . $cssTarget);
-            $this->line('  JS: ' . $jsTarget);
+            if (!empty($linkedDirectories)) {
+                $this->info('Successfully linked Tenancy assets:');
+                foreach ($linkedDirectories as $link) {
+                    $this->line('  ' . $link);
+                }
+            } else {
+                $this->warn('No asset directories found to link.');
+            }
             
             return 0;
         } catch (\Exception $e) {

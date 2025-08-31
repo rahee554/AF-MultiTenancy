@@ -1,0 +1,21 @@
+/* Artflow Studio Tenancy Package - Core Styles */
+.tenancy-admin {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.tenant-status-active {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.tenant-status-inactive {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.tenant-card {
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    padding: 16px;
+    margin-bottom: 16px;
+}

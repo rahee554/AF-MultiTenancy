@@ -3,6 +3,19 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Route Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Route prefix and middleware configuration for the admin interface.
+    |
+    */
+    'route' => [
+        'prefix' => env('AF_TENANCY_PREFIX', 'af-tenancy'),
+        'api_prefix' => env('AF_TENANCY_API_PREFIX', 'af-tenancy-api'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Central Domains Configuration
     |--------------------------------------------------------------------------
     |
@@ -109,35 +122,12 @@ return [
     |--------------------------------------------------------------------------
     |
     | Configuration for tenant-specific caching.
-    | 
-    | Isolation modes:
-    | - 'tags': Use cache tags for isolation (default, good performance)
-    | - 'prefix': Use tenant-specific cache prefixes  
-    | - 'database': Use separate cache tables per tenant (strongest isolation)
     |
     */
     'cache' => [
         'driver' => env('TENANT_CACHE_DRIVER', 'database'),
         'prefix' => env('TENANT_CACHE_PREFIX', 'tenant_'),
         'default_ttl' => env('TENANT_CACHE_TTL', 3600),
-        'isolation_mode' => env('TENANT_CACHE_ISOLATION', 'tags'), // tags, prefix, or database
-        'table' => env('TENANT_CACHE_TABLE', 'cache'), // Table name for database mode
-        'prefix_pattern' => env('TENANT_CACHE_PREFIX_PATTERN', 'tenant_{tenant_id}_'), // Pattern for prefix mode
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Session Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Configuration for tenant-specific sessions.
-    | When enabled, each tenant will have isolated sessions in their own database.
-    |
-    */
-    'session' => [
-        'isolation_enabled' => env('TENANT_SESSION_ISOLATION', true),
-        'table' => env('TENANT_SESSION_TABLE', 'sessions'),
-        'driver' => env('TENANT_SESSION_DRIVER', 'database'), // Only database supported currently
     ],
 
     /*
@@ -153,35 +143,6 @@ return [
         'database_offset' => env('TENANT_REDIS_DATABASE_OFFSET', 10),
         'prefix_pattern' => env('TENANT_REDIS_PREFIX_PATTERN', 'tenant_{tenant_id}_'),
         'central_prefix' => env('TENANT_REDIS_CENTRAL_PREFIX', 'central_'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Resource Quotas Configuration
-    |--------------------------------------------------------------------------
-    |
-    | Define default resource quotas for tenants. These can be overridden
-    | per tenant by storing custom quotas in tenant data.
-    |
-    */
-    'quotas' => [
-        'enabled' => env('TENANT_QUOTAS_ENABLED', true),
-        'default' => [
-            'database_size_mb' => env('TENANT_QUOTA_DATABASE_MB', 1000),
-            'file_storage_mb' => env('TENANT_QUOTA_STORAGE_MB', 5000),
-            'monthly_bandwidth_gb' => env('TENANT_QUOTA_BANDWIDTH_GB', 100),
-            'api_calls_per_day' => env('TENANT_QUOTA_API_CALLS', 10000),
-            'users' => env('TENANT_QUOTA_USERS', 100),
-            'monthly_emails' => env('TENANT_QUOTA_EMAILS', 1000),
-            'cron_jobs' => env('TENANT_QUOTA_CRON_JOBS', 10),
-            'webhooks' => env('TENANT_QUOTA_WEBHOOKS', 25),
-        ],
-        'warning_threshold' => env('TENANT_QUOTA_WARNING_THRESHOLD', 80), // Percentage
-        'enforcement' => [
-            'block_on_exceed' => env('TENANT_QUOTA_BLOCK_ON_EXCEED', true),
-            'grace_period_hours' => env('TENANT_QUOTA_GRACE_PERIOD', 24),
-            'notify_admins' => env('TENANT_QUOTA_NOTIFY_ADMINS', true),
-        ],
     ],
 
     /*

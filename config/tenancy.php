@@ -6,7 +6,7 @@ use Stancl\Tenancy\Database\Models\Domain;
 use Stancl\Tenancy\Database\Models\Tenant;
 
 return [
-    'tenant_model' => Tenant::class,
+    'tenant_model' => \ArtflowStudio\Tenancy\Models\Tenant::class,
     'id_generator' => Stancl\Tenancy\UUIDGenerator::class,
 
     'domain_model' => Domain::class,
@@ -29,20 +29,9 @@ return [
      */
     'bootstrappers' => [
         Stancl\Tenancy\Bootstrappers\DatabaseTenancyBootstrapper::class,
-        
-        // Enhanced cache isolation (replaces CacheTenancyBootstrapper for better options)
-        ArtflowStudio\Tenancy\Bootstrappers\EnhancedCacheTenancyBootstrapper::class,
-        
-        // Session isolation - stores sessions in tenant database
-        ArtflowStudio\Tenancy\Bootstrappers\SessionTenancyBootstrapper::class,
-        
-        // Filesystem isolation
+        Stancl\Tenancy\Bootstrappers\CacheTenancyBootstrapper::class,
         // Stancl\Tenancy\Bootstrappers\FilesystemTenancyBootstrapper::class, // Disabled temporarily for testing
-        
-        // Queue isolation
         Stancl\Tenancy\Bootstrappers\QueueTenancyBootstrapper::class,
-        
-        // Redis isolation (requires phpredis)
         // Stancl\Tenancy\Bootstrappers\RedisTenancyBootstrapper::class, // Note: phpredis is needed
     ],
 
@@ -146,7 +135,7 @@ return [
          * disable asset() helper tenancy and explicitly use tenant_asset() calls in places
          * where you want to use tenant-specific assets (product images, avatars, etc).
          */
-        'asset_helper_tenancy' => true,
+        'asset_helper_tenancy' => false,
     ],
 
     /**
