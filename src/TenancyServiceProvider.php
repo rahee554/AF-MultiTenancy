@@ -176,7 +176,6 @@ class TenancyServiceProvider extends ServiceProvider
         $this->app->singleton(Services\TenantMaintenanceMode::class);
         $this->app->singleton(Services\TenantSanctumService::class);
         $this->app->singleton(Services\TenantBackupService::class);
-        // Note: TenantPulseService removed - using custom tenant analytics instead
         
         // Register new enhanced services
         $this->app->singleton(Services\TenantAnalyticsService::class, function ($app) {
@@ -248,6 +247,7 @@ class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('af-tenant', Http\Middleware\TenantMiddleware::class);
         $router->aliasMiddleware('central', Http\Middleware\CentralDomainMiddleware::class);
         $router->aliasMiddleware('early-identification', Http\Middleware\EarlyIdentificationMiddleware::class);
+        $router->aliasMiddleware('asset.bypass', Http\Middleware\AssetBypassMiddleware::class);
         
         // Universal middleware - works for both central and tenant domains
         $router->aliasMiddleware('universal.web', Http\Middleware\UniversalWebMiddleware::class);

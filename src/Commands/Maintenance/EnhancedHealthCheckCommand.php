@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Config;
 use ArtflowStudio\Tenancy\Models\Tenant;
-use ArtflowStudio\Tenancy\Services\TenantPulseService;
+use ArtflowStudio\Tenancy\Services\TenantAnalyticsService;
 use Stancl\Tenancy\Facades\Tenancy;
 
 class EnhancedHealthCheckCommand extends Command
@@ -70,7 +70,7 @@ class EnhancedHealthCheckCommand extends Command
             $progressBar->advance();
 
             $progressBar->setMessage('Checking Pulse integration...');
-            $this->checkPulseIntegration();
+            $this->checkAnalyticsIntegration();
             $progressBar->advance();
 
             $progressBar->setMessage('Checking file permissions...');
@@ -320,28 +320,21 @@ class EnhancedHealthCheckCommand extends Command
         }
     }
 
-    private function checkPulseIntegration(): void
+    private function checkAnalyticsIntegration(): void
     {
         $this->totalChecks++;
 
         try {
-            // Check if Pulse is available
-            if (!class_exists('\Laravel\Pulse\Facades\Pulse')) {
-                $this->warnings[] = 'Laravel Pulse is not installed';
-                $this->passedChecks++; // Not critical
-                return;
-            }
-
-            // Check if our Pulse service is working
-            $pulseService = app(TenantPulseService::class);
+            // Check if our Analytics service is working
+            $analyticsService = app(TenantAnalyticsService::class);
             
-            // Test metric recording
-            $pulseService->recordTenantMetric('health_check', 'test', 1, 'test-tenant');
+            // Test service availability
+            $testResult = $analyticsService->getTenantMetrics('health-check-test');
             
             $this->passedChecks++;
 
         } catch (\Exception $e) {
-            $this->warnings[] = 'Pulse integration issue: ' . $e->getMessage();
+            $this->warnings[] = 'Analytics integration issue: ' . $e->getMessage();
             $this->passedChecks++; // Not critical
         }
     }
@@ -378,7 +371,7 @@ class EnhancedHealthCheckCommand extends Command
         $services = [
             'ArtflowStudio\Tenancy\Services\TenantService',
             'ArtflowStudio\Tenancy\Services\TenantContextCache',
-            'ArtflowStudio\Tenancy\Services\TenantPulseService',
+            'ArtflowStudio\Tenancy\Services\TenantAnalyticsService',
         ];
 
         $missingServices = [];

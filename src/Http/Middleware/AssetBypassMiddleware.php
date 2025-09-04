@@ -36,8 +36,7 @@ class AssetBypassMiddleware
             }
         }
 
-        // If not an asset, continue with tenant middleware
-        $tenantMiddleware = app(\ArtflowStudio\Tenancy\Http\Middleware\SimpleTenantMiddleware::class);
-        return $tenantMiddleware->handle($request, $next);
+        // If not an asset, continue with the request normally
+        return $next($request);
     }
 }
