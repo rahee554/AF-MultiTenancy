@@ -21,8 +21,7 @@ class TestCachedLookupCommand extends Command
                           {--domain= : Specific domain to test}
                           {--clear-cache : Clear cache before testing}
                           {--warm-cache : Warm cache after testing}
-                          {--benchmark : Run performance benchmarks}
-                          {--verbose : Show detailed output}';
+                          {--benchmark : Run performance benchmarks}';
 
     protected $description = 'Test cached tenant lookup functionality and performance';
 

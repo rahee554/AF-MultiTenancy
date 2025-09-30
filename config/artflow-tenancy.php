@@ -27,8 +27,8 @@ return [
         '127.0.0.1',
         'localhost',
         env('APP_DOMAIN', 'localhost'),
-        'admin.' . env('APP_DOMAIN', 'localhost'),
-        'central.' . env('APP_DOMAIN', 'localhost'),
+        'admin.'.env('APP_DOMAIN', 'localhost'),
+        'central.'.env('APP_DOMAIN', 'localhost'),
     ],
 
     /*
@@ -274,21 +274,21 @@ return [
         'retention_days' => env('TENANT_BACKUP_RETENTION_DAYS', 30),
         'compress_by_default' => env('TENANT_BACKUP_COMPRESS', true),
         'max_backup_size' => env('TENANT_BACKUP_MAX_SIZE', '2G'), // 2GB limit
-        
+
         // MySQL binary paths (auto-detected if not specified)
         'mysqldump_path' => env('TENANT_BACKUP_MYSQLDUMP_PATH', 'mysqldump'),
         'mysql_path' => env('TENANT_BACKUP_MYSQL_PATH', 'mysql'),
-        
+
         // Backup options
         'include_routines' => env('TENANT_BACKUP_INCLUDE_ROUTINES', true),
         'include_triggers' => env('TENANT_BACKUP_INCLUDE_TRIGGERS', true),
         'include_events' => env('TENANT_BACKUP_INCLUDE_EVENTS', true),
         'single_transaction' => env('TENANT_BACKUP_SINGLE_TRANSACTION', true),
-        
+
         // Storage configuration
         'path_pattern' => env('TENANT_BACKUP_PATH_PATTERN', 'tenants/{tenant_id}/backups'),
         'filename_pattern' => env('TENANT_BACKUP_FILENAME_PATTERN', 'tenant_{tenant_id}_{timestamp}_{type}'),
-        
+
         // Automatic backups
         'auto_backup' => [
             'enabled' => env('TENANT_AUTO_BACKUP_ENABLED', false),

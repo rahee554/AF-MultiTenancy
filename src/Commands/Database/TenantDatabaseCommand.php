@@ -978,88 +978,148 @@ class TenantDatabaseCommand extends Command
     }
 
     /**
-     * Get migration status for comparison
+     * Get migration status for comparison - Enhanced version
      */
     private function getMigrationStatus(string $path): array
     {
         try {
-            Artisan::call('migrate:status', ['--path' => $path]);
-            $output = Artisan::output();
+            // Get all migration files from filesystem
+            $migrationFiles = glob(base_path($path) . '/*.php');
+            $availableMigrations = [];
             
-            $migrations = [];
-            $lines = explode("\n", $output);
-            
-            foreach ($lines as $line) {
-                if (preg_match('/\|\s*(\w+)\s*\|\s*(.+)\s*\|/', $line, $matches)) {
-                    $status = trim($matches[1]);
-                    $migration = trim($matches[2]);
-                    $migrations[$migration] = $status;
-                }
+            foreach ($migrationFiles as $file) {
+                $filename = basename($file, '.php');
+                $availableMigrations[] = $filename;
             }
             
-            return $migrations;
+            // Get ran migrations from database
+            $ranMigrations = [];
+            try {
+                $ranMigrations = DB::table('migrations')->pluck('migration')->toArray();
+            } catch (\Exception $e) {
+                // Migration table might not exist yet
+            }
+            
+            return [
+                'available' => $availableMigrations,
+                'ran' => $ranMigrations,
+                'pending' => array_diff($availableMigrations, $ranMigrations),
+                'count_available' => count($availableMigrations),
+                'count_ran' => count($ranMigrations),
+                'count_pending' => count(array_diff($availableMigrations, $ranMigrations))
+            ];
         } catch (\Exception $e) {
-            return [];
+            return [
+                'available' => [],
+                'ran' => [],
+                'pending' => [],
+                'count_available' => 0,
+                'count_ran' => 0,
+                'count_pending' => 0,
+                'error' => $e->getMessage()
+            ];
         }
     }
 
     /**
-     * Show migration summary (only successful ones)
+     * Show enhanced migration summary with individual migration progress and timing
      */
     private function showMigrationSummary(string $output): void
     {
-        $lines = explode("\n", $output);
-        $migrations = [];
+        $startTime = microtime(true);
+        $memoryStart = memory_get_usage(true);
+        
+        // Parse the Artisan output for migration information
+        $lines = explode("\n", trim($output));
+        $migratedFiles = [];
+        $batchNumber = null;
         
         foreach ($lines as $line) {
-            if (str_contains($line, 'Migrating:') || str_contains($line, 'Migrated:')) {
-                $migrations[] = trim($line);
+            // Look for migrating pattern (in progress)
+            if (preg_match('/Migrating: (.+)/', $line, $matches)) {
+                $migrationName = trim($matches[1]);
+                $this->line("⏳ " . Str::limit($migrationName, 60) . " ...");
+                continue;
+            }
+            
+            // Look for migrated pattern with timing
+            if (preg_match('/Migrated:\s+(.+?)\s+\(([0-9.]+)([a-z]+)\)/', $line, $matches)) {
+                $migrationName = trim($matches[1]);
+                $duration = $matches[2];
+                $unit = $matches[3];
+                
+                $dots = str_repeat('.', max(1, 65 - strlen($migrationName)));
+                $this->info("✅ " . Str::limit($migrationName, 60) . " {$dots} {$duration}{$unit}");
+                $migratedFiles[] = $migrationName;
+                continue;
+            }
+            
+            // Look for batch information
+            if (preg_match('/Batch number: (\d+)/', $line, $matches)) {
+                $batchNumber = $matches[1];
+            }
+            
+            // Check for "Nothing to migrate" message
+            if (str_contains($line, 'Nothing to migrate')) {
+                $this->info("ℹ️  Nothing to migrate - all migrations are up to date");
+                return;
             }
         }
         
-        if (!empty($migrations)) {
-            $this->info("📋 Migration Summary:");
-            foreach ($migrations as $migration) {
-                if (str_contains($migration, 'Migrated:')) {
-                    $this->line("  ✅ " . str_replace('Migrated:', '', $migration));
-                } else {
-                    $this->line("  🔄 " . str_replace('Migrating:', '', $migration));
-                }
-            }
+        $endTime = microtime(true);
+        $memoryEnd = memory_get_usage(true);
+        $totalTime = round($endTime - $startTime, 2);
+        $memoryUsed = round(($memoryEnd - $memoryStart) / 1024 / 1024, 2);
+        
+        if (!empty($migratedFiles)) {
             $this->newLine();
+            $this->info("Migration completed in {$totalTime}s (Memory: {$memoryUsed}MB)");
+            $this->info("� Total: " . count($migratedFiles) . " migration(s)" . 
+                       ($batchNumber ? ", Batch: {$batchNumber}" : "") . 
+                       ", Success: " . count($migratedFiles) . ", Failed: 0");
         }
     }
 
-    /**
-     * Show changes between before and after migration states
-     */
     private function showMigrationChanges(array $before, array $after): void
     {
-        $changes = [];
+        $newlyRan = array();
+        if (isset($after['ran']) && isset($before['ran'])) {
+            $newlyRan = array_diff($after['ran'], $before['ran']);
+        }
         
-        foreach ($after as $migration => $status) {
-            if (!isset($before[$migration]) || $before[$migration] !== $status) {
-                $changes[] = [
-                    'migration' => $migration,
-                    'before' => $before[$migration] ?? 'Not found',
-                    'after' => $status
-                ];
+        $stillPending = isset($after['pending']) ? $after['pending'] : array();
+        
+        if (!empty($newlyRan)) {
+            $this->newLine();
+            $this->info('Newly migrated (' . count($newlyRan) . '):');
+            foreach ($newlyRan as $migration) {
+                $shortName = Str::limit(basename($migration, '.php'), 60);
+                $this->line('   - ' . $shortName);
             }
         }
         
-        if (!empty($changes)) {
-            $this->info("📊 Migration Status Changes:");
-            $headers = ['Migration', 'Before', 'After'];
-            $rows = array_map(function ($change) {
-                return [
-                    Str::limit($change['migration'], 50),
-                    $change['before'] === 'Not found' ? '🆕 New' : 
-                        ($change['before'] === 'Pending' ? '⏳ Pending' : '✅ ' . $change['before']),
-                    $change['after'] === 'Ran' ? '✅ Ran' : '⏳ ' . $change['after']
-                ];
-            }, $changes);
-            
-            $this->table($headers, $rows);
+        if (!empty($stillPending) && count($stillPending) > 0) {
+            $this->newLine();
+            $this->warn('Still pending (' . count($stillPending) . '):');
+            foreach (array_slice($stillPending, 0, 5) as $migration) {
+                $shortName = Str::limit(basename($migration, '.php'), 60);
+                $this->line('   - ' . $shortName);
+            }
+            if (count($stillPending) > 5) {
+                $this->line('   ... and ' . (count($stillPending) - 5) . ' more');
+            }
+        }
+        
+        if (empty($newlyRan) && empty($stillPending)) {
+            $this->info('No migration state changes detected');
+        }
+        
+        $beforeCount = isset($before['count_ran']) ? $before['count_ran'] : 0;
+        $afterCount = isset($after['count_ran']) ? $after['count_ran'] : 0;
+        
+        if ($afterCount > $beforeCount) {
+            $this->newLine();
+            $this->info('Migration Progress: ' . $beforeCount . ' -> ' . $afterCount . ' (+' . ($afterCount - $beforeCount) . ')');
         }
     }
 

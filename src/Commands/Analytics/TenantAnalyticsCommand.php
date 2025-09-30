@@ -5,7 +5,6 @@ namespace ArtflowStudio\Tenancy\Commands\Analytics;
 use Illuminate\Console\Command;
 use ArtflowStudio\Tenancy\Services\TenantAnalyticsService;
 use ArtflowStudio\Tenancy\Services\TenantResourceQuotaService;
-use Stancl\Tenancy\Database\Models\Tenant;
 
 class TenantAnalyticsCommand extends Command
 {
@@ -36,7 +35,8 @@ class TenantAnalyticsCommand extends Command
             return $this->showAllTenants();
         }
 
-        $tenant = Tenant::find($tenantId);
+        $tenantModel = config('tenancy.tenant_model');
+        $tenant = $tenantModel::find($tenantId);
         if (!$tenant) {
             $this->error("Tenant '{$tenantId}' not found.");
             return 1;
@@ -47,6 +47,7 @@ class TenantAnalyticsCommand extends Command
         // Safely get domain if it exists
         $domain = 'No domain';
         try {
+            $tenant->load('domains');
             if ($tenant->domains && $tenant->domains->count() > 0) {
                 $domain = $tenant->domains->first()->domain;
             }
@@ -74,7 +75,8 @@ class TenantAnalyticsCommand extends Command
 
     protected function showAllTenants()
     {
-        $tenants = Tenant::with('domains')->get();
+        $tenantModel = config('tenancy.tenant_model');
+        $tenants = $tenantModel::with('domains')->get();
 
         if ($tenants->isEmpty()) {
             $this->info('No tenants found.');

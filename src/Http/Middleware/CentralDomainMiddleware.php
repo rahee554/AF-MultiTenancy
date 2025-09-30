@@ -14,7 +14,7 @@ class CentralDomainMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $centralDomains = config('tenancy.central_domains', ['localhost', '127.0.0.1']);
+        $centralDomains = config('artflow-tenancy.central_domains', config('tenancy.central_domains', ['localhost', '127.0.0.1']));
         $currentDomain = $request->getHost();
         
         // Add APP_DOMAIN to central domains if set

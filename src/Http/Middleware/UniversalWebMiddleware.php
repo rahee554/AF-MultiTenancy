@@ -15,29 +15,24 @@ use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
  */
 class UniversalWebMiddleware
 {
-    protected $tenancyMiddleware;
-
-    public function __construct()
-    {
-        $this->tenancyMiddleware = new InitializeTenancyByDomain();
-    }
-
     /**
      * Handle an incoming request
      */
+
     public function handle(Request $request, Closure $next): Response
     {
         $domain = $request->getHost();
-        $centralDomains = config('tenancy.central_domains', []);
+        $centralDomains = config('artflow-tenancy.central_domains', config('tenancy.central_domains', []));
 
         // If it's a central domain, just continue
         if (in_array($domain, $centralDomains)) {
             return $next($request);
         }
 
-        // Otherwise, try to initialize tenancy
+        // Otherwise, try to initialize tenancy using the service container
         try {
-            return $this->tenancyMiddleware->handle($request, $next);
+            $tenancyMiddleware = app(InitializeTenancyByDomain::class);
+            return $tenancyMiddleware->handle($request, $next);
         } catch (\Exception $e) {
             // If tenant not found, continue anyway (fall back to central behavior)
             return $next($request);

@@ -14,7 +14,7 @@ class DynamicDatabaseConfigManager
     {
         try {
             // Get current user info
-            $currentUser = DB::select("SELECT USER() as current_user")[0]->current_user;
+            $currentUser = DB::select("SELECT USER() as `current_user`")[0]->current_user;
             
             // Check grants for current user
             $grants = DB::select("SHOW GRANTS");
