@@ -139,6 +139,13 @@ class TenancyServiceProvider extends ServiceProvider
                 
                 // System Commands - NEW
                 Commands\System\CacheSetupCommand::class,
+                
+                // Performance Testing Commands - NEW
+                Commands\PerformanceTesting\MasterPerformanceTestCommand::class,
+                Commands\PerformanceTesting\TenancyPerformanceTestCommand::class,
+                Commands\PerformanceTesting\DatabaseStressTestCommand::class,
+                Commands\PerformanceTesting\ConnectionPoolTestCommand::class,
+                Commands\PerformanceTesting\CachePerformanceTestCommand::class,
             ]);
         }
 

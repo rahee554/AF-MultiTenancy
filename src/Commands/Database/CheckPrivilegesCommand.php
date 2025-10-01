@@ -1008,23 +1008,47 @@ class CheckPrivilegesCommand extends Command
 
     private function listPrivilegedUsers(string $connection = null): void
     {
+        $query = "SELECT User, Host, Create_priv, Drop_priv, Super_priv, Grant_priv FROM mysql.user WHERE Create_priv = 'Y' OR Super_priv = 'Y' ORDER BY User";
+        $triedRoot = false;
+        $rootUser = env('DB_ROOT_USERNAME');
+        $rootPass = env('DB_ROOT_PASSWORD');
+        $host = null;
+        $port = null;
+        $database = null;
+        $driver = null;
         try {
             $this->info('👥 Users with CREATE DATABASE privileges:');
-            
-            // Query mysql.user table for users with global CREATE privilege
-            $privilegedUsers = DB::connection($connection)->select("
-                SELECT 
-                    User, 
-                    Host, 
-                    Create_priv,
-                    Drop_priv,
-                    Super_priv,
-                    Grant_priv
-                FROM mysql.user 
-                WHERE Create_priv = 'Y' 
-                   OR Super_priv = 'Y'
-                ORDER BY User
-            ");
+            $config = config("database.connections." . ($connection ?: config('database.default', 'mysql')));
+            $host = $config['host'] ?? '127.0.0.1';
+            $port = $config['port'] ?? '3306';
+            $database = $config['database'] ?? null;
+            $driver = $config['driver'] ?? 'mysql';
+
+            try {
+                // Try with current connection first
+                $privilegedUsers = DB::connection($connection)->select($query);
+            } catch (\Exception $e) {
+                // If access denied, try with root credentials if available
+                if ($rootUser && $rootPass) {
+                    $triedRoot = true;
+                    try {
+                        $pdo = new \PDO(
+                            "mysql:host={$host};port={$port};dbname=mysql",
+                            $rootUser,
+                            $rootPass
+                        );
+                        $stmt = $pdo->query($query);
+                        $privilegedUsers = $stmt->fetchAll(\PDO::FETCH_OBJ);
+                    } catch (\Exception $ex) {
+                        $this->error("Error listing privileged users with root: {$ex->getMessage()}");
+                        return;
+                    }
+                } else {
+                    $this->error("Error listing privileged users: {$e->getMessage()}");
+                    $this->warn('Tip: Set DB_ROOT_USERNAME and DB_ROOT_PASSWORD in your .env to allow root-level checks.');
+                    return;
+                }
+            }
 
             if (empty($privilegedUsers)) {
                 $this->warn('No users found with CREATE DATABASE privileges');

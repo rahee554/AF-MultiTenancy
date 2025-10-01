@@ -36,12 +36,37 @@ class CreateTenantCommand extends Command
         $this->info('🚀 Tenant Creation Wizard');
         $this->newLine();
 
+        // Step 0: Check database privileges BEFORE asking for tenant details
+        $privilegedUser = null;
+        $currentUser = $this->getCurrentDatabaseUser();
+        $hasCurrent = $this->hasCreateDatabasePrivilege($currentUser);
+
+        $envRootUser = $this->getEnvRootUser();
+        $hasEnvRoot = false;
+        if ($envRootUser) {
+            // Double-check privilege for ENV root user
+            $hasEnvRoot = $this->hasCreateDatabasePrivilege($envRootUser);
+        }
+
+        if ($hasCurrent) {
+            $this->info("✅ Current user '{$currentUser['user']}@{$currentUser['host']}' has CREATE DATABASE privilege.");
+            $privilegedUser = $currentUser;
+        } elseif ($hasEnvRoot) {
+            $this->info("✅ ENV root user '{$envRootUser['user']}@{$envRootUser['host']}' has CREATE DATABASE privilege.");
+            $privilegedUser = $envRootUser;
+        } else {
+            $this->error('❌ Neither the current database user nor the ENV root user has CREATE DATABASE privilege.');
+            $this->comment('💡 Please add root credentials to .env (DB_ROOT_USERNAME, DB_ROOT_PASSWORD) or grant CREATE privilege to the current user.');
+            $this->comment('   Example: GRANT CREATE ON *.* TO \'' . $currentUser['user'] . '\'@' . $currentUser['host'] . '\'; FLUSH PRIVILEGES;');
+            return 1;
+        }
+
         // Step 1: Get basic tenant information
         $tenantData = $this->collectTenantData();
-        
+
         // Step 2: Select creation mode
         $mode = $this->selectCreationMode();
-        
+
         // Step 3: Handle creation based on mode
         if ($mode === 'fastpanel') {
             return $this->createWithFastPanel($tenantData);
@@ -765,6 +790,10 @@ class CreateTenantCommand extends Command
             
             // Apply TENANT_DB_PREFIX from environment/config
             $prefix = config('tenancy.database.prefix', env('TENANT_DB_PREFIX', 'tenant_'));
+            // Ensure prefix ends with an underscore when using config value as well
+            if ($prefix !== '' && !str_ends_with($prefix, '_')) {
+                $prefix .= '_';
+            }
             
             // Check if prefix is already applied
             if (!str_starts_with($baseName, $prefix)) {
