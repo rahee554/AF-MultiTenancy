@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\PerformanceTesting;
+namespace ArtflowStudio\Tenancy\Commands\Testing\Performance;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;

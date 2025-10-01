@@ -1,6 +1,6 @@
 <?php
 
-namespace ArtflowStudio\Tenancy\Commands\PerformanceTesting;
+namespace ArtflowStudio\Tenancy\Commands\Testing\Performance;
 
 use ArtflowStudio\Tenancy\Models\Tenant;
 use Illuminate\Console\Command;
