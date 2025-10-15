@@ -92,6 +92,7 @@ class TenancyServiceProvider extends ServiceProvider
                 Commands\Maintenance\HealthCheckCommand::class,
                 Commands\Maintenance\EnhancedHealthCheckCommand::class,
                 Commands\Maintenance\TenantMaintenanceModeCommand::class,
+                Commands\Maintenance\ClearStaleCacheCommand::class,
                 
                 // Backup Commands
                 Commands\Backup\TenantBackupCommand::class,
@@ -268,6 +269,9 @@ class TenancyServiceProvider extends ServiceProvider
         $router->aliasMiddleware('tenant.homepage', Http\Middleware\HomepageRedirectMiddleware::class);
         $router->aliasMiddleware('tenant.auth', Http\Middleware\TenantAuthMiddleware::class);
         $router->aliasMiddleware('tenant.api', Http\Middleware\ApiAuthMiddleware::class);
+        
+        // CRITICAL: Stale session detection (prevents 403 Forbidden after DB recreation)
+        $router->aliasMiddleware('tenant.detect-stale', Http\Middleware\DetectStaleSessionMiddleware::class);
 
         // MIDDLEWARE GROUPS - Simplified using official stancl/tenancy patterns
         
@@ -289,6 +293,7 @@ class TenancyServiceProvider extends ServiceProvider
             'tenant',                     // Initialize tenancy by domain (stancl/tenancy)
             'tenant.prevent-central',     // Prevent access from central domains (stancl/tenancy)
             'tenant.scope-sessions',      // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
+            'tenant.detect-stale',        // CRITICAL: Detect stale sessions after DB recreation
             // 'af-tenant',               // COMMENTED: Our enhancements - simplify by removing
         ]);
 

@@ -136,6 +136,9 @@ class DeleteTenantCommand extends Command
             }
         }
 
+        // CRITICAL FIX: Clear all tenant-related cache and sessions BEFORE deleting
+        $this->clearTenantCacheAndSessions($tenant);
+
         // Delete tenant record (domains, related models should cascade if set)
         try {
             $tenant->delete();
@@ -146,6 +149,117 @@ class DeleteTenantCommand extends Command
         }
 
         return 0;
+    }
+
+    /**
+     * Clear all cache and session data related to this tenant
+     * This prevents stale authentication data issues
+     */
+    private function clearTenantCacheAndSessions(Tenant $tenant): void
+    {
+        $this->info('🧹 Clearing tenant cache and sessions...');
+        
+        try {
+            $tenantId = $tenant->id;
+            $domains = $tenant->domains;
+            
+            // 1. Clear tenant-specific cache
+            if (config('cache.default') === 'redis') {
+                try {
+                    $redis = \Illuminate\Support\Facades\Redis::connection();
+                    // Clear all tenant-prefixed keys
+                    $pattern = "tenant_{$tenantId}_*";
+                    $keys = $redis->keys($pattern);
+                    if (!empty($keys)) {
+                        $redis->del($keys);
+                        $this->line("   ✓ Cleared Redis cache keys: " . count($keys));
+                    }
+                } catch (Exception $e) {
+                    $this->warn("   ⚠ Redis cache clear failed: " . $e->getMessage());
+                }
+            } else {
+                // Database cache driver
+                try {
+                    DB::table('cache')->where('key', 'like', "tenant_{$tenantId}_%")->delete();
+                    DB::table('cache')->where('key', 'like', "laravel_cache:tenant_{$tenantId}_%")->delete();
+                    $this->line("   ✓ Cleared database cache");
+                } catch (Exception $e) {
+                    $this->warn("   ⚠ Database cache clear failed: " . $e->getMessage());
+                }
+            }
+            
+            // 2. Clear sessions related to this tenant
+            try {
+                // Clear database sessions if using database driver
+                if (config('session.driver') === 'database') {
+                    // Delete sessions that contain this tenant's data
+                    $deleted = DB::table(config('session.table', 'sessions'))
+                        ->where('payload', 'like', "%{$tenantId}%")
+                        ->delete();
+                    if ($deleted > 0) {
+                        $this->line("   ✓ Cleared {$deleted} tenant session(s)");
+                    }
+                    
+                    // Also clear sessions by domain if we have domains
+                    foreach ($domains as $domain) {
+                        $deletedByDomain = DB::table(config('session.table', 'sessions'))
+                            ->where('payload', 'like', "%{$domain->domain}%")
+                            ->delete();
+                        if ($deletedByDomain > 0) {
+                            $this->line("   ✓ Cleared {$deletedByDomain} session(s) for domain: {$domain->domain}");
+                        }
+                    }
+                }
+                
+                // Clear file sessions if using file driver
+                if (config('session.driver') === 'file') {
+                    $sessionPath = storage_path('framework/sessions');
+                    if (is_dir($sessionPath)) {
+                        $files = glob($sessionPath . '/*');
+                        $cleared = 0;
+                        foreach ($files as $file) {
+                            if (is_file($file)) {
+                                $content = file_get_contents($file);
+                                if (strpos($content, $tenantId) !== false) {
+                                    unlink($file);
+                                    $cleared++;
+                                }
+                            }
+                        }
+                        if ($cleared > 0) {
+                            $this->line("   ✓ Cleared {$cleared} file session(s)");
+                        }
+                    }
+                }
+            } catch (Exception $e) {
+                $this->warn("   ⚠ Session clear failed: " . $e->getMessage());
+            }
+            
+            // 3. Clear Laravel application cache
+            try {
+                \Illuminate\Support\Facades\Artisan::call('cache:clear');
+                $this->line("   ✓ Application cache cleared");
+            } catch (Exception $e) {
+                $this->warn("   ⚠ Application cache clear failed: " . $e->getMessage());
+            }
+            
+            // 4. Clear tenant context cache
+            try {
+                $cacheService = app(\ArtflowStudio\Tenancy\Services\TenantContextCache::class);
+                foreach ($domains as $domain) {
+                    $cacheService->forget($domain->domain);
+                }
+                $this->line("   ✓ Tenant context cache cleared");
+            } catch (Exception $e) {
+                $this->warn("   ⚠ Tenant context cache clear failed: " . $e->getMessage());
+            }
+            
+            $this->info('✅ Cache and session cleanup completed');
+            
+        } catch (Exception $e) {
+            $this->warn("⚠ Overall cache/session cleanup encountered errors: " . $e->getMessage());
+            $this->line("   This may cause stale session issues. Users should clear their browser cookies.");
+        }
     }
 
     private function findTenant(): ?Tenant

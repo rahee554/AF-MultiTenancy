@@ -110,8 +110,12 @@ class TenantService
     public function deleteTenant(Tenant $tenant): void
     {
         $databaseName = $tenant->getDatabaseName();
+        $tenantId = $tenant->id;
         
         try {
+            // CRITICAL FIX: Clear all tenant-related cache and sessions BEFORE deletion
+            $this->clearTenantCacheAndSessions($tenant);
+            
             // Delete the tenant record first (this will also delete domains via foreign key)
             $tenant->delete();
             
@@ -119,18 +123,89 @@ class TenantService
             $this->dropPhysicalDatabase($databaseName);
             
             Log::info("Tenant and database deleted successfully", [
-                'tenant_id' => $tenant->id,
+                'tenant_id' => $tenantId,
                 'database' => $databaseName,
             ]);
             
         } catch (\Exception $e) {
             Log::error("Failed to delete tenant", [
-                'tenant_id' => $tenant->id,
+                'tenant_id' => $tenantId,
                 'database' => $databaseName,
                 'error' => $e->getMessage(),
             ]);
             
             throw new \Exception("Failed to delete tenant: " . $e->getMessage());
+        }
+    }
+
+    /**
+     * Clear all cache and session data related to a tenant
+     * Prevents stale authentication data issues (403 Forbidden errors)
+     */
+    private function clearTenantCacheAndSessions(Tenant $tenant): void
+    {
+        try {
+            $tenantId = $tenant->id;
+            $domains = $tenant->domains;
+            
+            // 1. Clear tenant-specific cache
+            if (config('cache.default') === 'redis') {
+                try {
+                    $redis = \Illuminate\Support\Facades\Redis::connection();
+                    $pattern = "tenant_{$tenantId}_*";
+                    $keys = $redis->keys($pattern);
+                    if (!empty($keys)) {
+                        $redis->del($keys);
+                        Log::info("Cleared Redis cache keys for tenant", ['count' => count($keys)]);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("Redis cache clear failed for tenant: " . $e->getMessage());
+                }
+            } else {
+                // Database cache driver
+                try {
+                    DB::table('cache')->where('key', 'like', "tenant_{$tenantId}_%")->delete();
+                    DB::table('cache')->where('key', 'like', "laravel_cache:tenant_{$tenantId}_%")->delete();
+                } catch (\Exception $e) {
+                    Log::warning("Database cache clear failed: " . $e->getMessage());
+                }
+            }
+            
+            // 2. Clear sessions related to this tenant
+            if (config('session.driver') === 'database') {
+                try {
+                    $deleted = DB::table(config('session.table', 'sessions'))
+                        ->where('payload', 'like', "%{$tenantId}%")
+                        ->delete();
+                    
+                    // Also clear by domain
+                    foreach ($domains as $domain) {
+                        DB::table(config('session.table', 'sessions'))
+                            ->where('payload', 'like', "%{$domain->domain}%")
+                            ->delete();
+                    }
+                    
+                    Log::info("Cleared tenant sessions", ['count' => $deleted]);
+                } catch (\Exception $e) {
+                    Log::warning("Session clear failed: " . $e->getMessage());
+                }
+            }
+            
+            // 3. Clear tenant context cache
+            try {
+                $cacheService = app(TenantContextCache::class);
+                foreach ($domains as $domain) {
+                    $cacheService->forget($domain->domain);
+                }
+            } catch (\Exception $e) {
+                Log::warning("Tenant context cache clear failed: " . $e->getMessage());
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("Overall cache/session cleanup failed", [
+                'tenant_id' => $tenant->id,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
