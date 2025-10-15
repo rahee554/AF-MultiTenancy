@@ -20,6 +20,11 @@ class DeleteTenantCommand extends Command
 
     public function handle(): int
     {
+        // Check if current user has system privileges (sudo/root) BEFORE proceeding
+        if (!$this->checkSystemPrivileges()) {
+            return 1;
+        }
+
         $tenant = $this->findTenant();
         if (! $tenant) {
             return 1;
@@ -457,5 +462,142 @@ class DeleteTenantCommand extends Command
         // Fallback to default connection (may fail if user lacks privileges)
         DB::connection()->unprepared("DROP USER IF EXISTS '{$username}'@'{$host}';");
         DB::connection()->unprepared("FLUSH PRIVILEGES;");
+    }
+
+    private function checkSystemPrivileges(): bool
+    {
+        $this->info('🔍 Checking system privileges...');
+        
+        // Get current system user
+        $currentSystemUser = $this->getCurrentSystemUser();
+        
+        // Check if current user is root
+        if ($currentSystemUser === 'root') {
+            $this->info("✅ Running as root user");
+            return true;
+        }
+        
+        // Check if current user has sudo privileges
+        if ($this->hasSudoPrivileges()) {
+            $this->info("✅ User '{$currentSystemUser}' has sudo privileges");
+            return true;
+        }
+        
+        // Check if we can identify users with sudo privileges
+        $sudoUsers = $this->getSudoUsers();
+        
+        $this->error("❌ Current user '{$currentSystemUser}' does not have sufficient system privileges!");
+        $this->newLine();
+        
+        $this->warn('⚠️  This command requires system privileges to:');
+        $this->line('   • Delete databases and users');
+        $this->line('   • Configure FastPanel (if used)');
+        $this->line('   • Manage system resources');
+        $this->newLine();
+        
+        if (!empty($sudoUsers)) {
+            $this->comment('💡 Available options:');
+            $this->line("   1. Switch to a privileged user:");
+            foreach (array_slice($sudoUsers, 0, 3) as $user) {
+                $this->line("      su {$user}");
+            }
+            $recommendedUser = $sudoUsers[0] ?? 'ubuntu';
+            $this->newLine();
+            $this->comment('💡 Then run the command as:');
+            $this->line("   sudo -u {$recommendedUser} php artisan tenant:delete");
+        } else {
+            $this->comment('💡 Available options:');
+            $this->line("   1. Switch to root user: su root");
+            $this->line("   2. Use sudo if available: sudo php artisan tenant:delete");
+            $this->line("   3. Contact system administrator");
+            $this->newLine();
+            $this->comment('💡 Or run as privileged user:');
+            $this->line("   sudo -u ubuntu php artisan tenant:delete");
+        }
+        
+        $this->newLine();
+        $this->comment('🔧 To grant sudo privileges to current user:');
+        $this->line("   echo '{$currentSystemUser} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-{$currentSystemUser}");
+        
+        return false;
+    }
+    
+    private function getCurrentSystemUser(): string
+    {
+        // Try multiple methods to get current user
+        $user = posix_getpwuid(posix_geteuid());
+        if ($user && isset($user['name'])) {
+            return $user['name'];
+        }
+        
+        // Fallback to environment variables
+        return $_SERVER['USER'] ?? $_SERVER['USERNAME'] ?? get_current_user() ?? 'unknown';
+    }
+    
+    private function hasSudoPrivileges(): bool
+    {
+        try {
+            $result = shell_exec('sudo -n true 2>/dev/null; echo $?');
+            return trim($result) === '0';
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+    
+    private function getSudoUsers(): array
+    {
+        $sudoUsers = [];
+        
+        try {
+            // Check /etc/sudoers.d/ directory for user configurations
+            if (is_dir('/etc/sudoers.d/')) {
+                $files = scandir('/etc/sudoers.d/');
+                foreach ($files as $file) {
+                    if ($file === '.' || $file === '..') continue;
+                    
+                    $filePath = "/etc/sudoers.d/{$file}";
+                    if (is_file($filePath) && is_readable($filePath)) {
+                        $content = file_get_contents($filePath);
+                        if (preg_match('/^(\w+)\s+ALL=/', $content, $matches)) {
+                            $username = $matches[1];
+                            if ($this->isValidSystemUser($username)) {
+                                $sudoUsers[] = $username;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Add common privileged users if they exist
+            $commonUsers = ['ubuntu', 'admin', 'root', 'www-data'];
+            foreach ($commonUsers as $user) {
+                if ($this->isValidSystemUser($user) && !in_array($user, $sudoUsers)) {
+                    $sudoUsers[] = $user;
+                }
+            }
+            
+            // Remove duplicates and current user if present
+            $sudoUsers = array_unique($sudoUsers);
+            $currentUser = $this->getCurrentSystemUser();
+            $sudoUsers = array_filter($sudoUsers, function($user) use ($currentUser) {
+                return $user !== $currentUser;
+            });
+            
+        } catch (Exception $e) {
+            // Return common fallback users
+            return ['ubuntu', 'root'];
+        }
+        
+        return $sudoUsers;
+    }
+    
+    private function isValidSystemUser(string $username): bool
+    {
+        try {
+            $user = posix_getpwnam($username);
+            return $user !== false;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 }

@@ -36,6 +36,11 @@ class CreateTenantCommand extends Command
         $this->info('🚀 Tenant Creation Wizard');
         $this->newLine();
 
+        // Step -1: Check if current user has system privileges (sudo/root) BEFORE database checks
+        if (!$this->checkSystemPrivileges()) {
+            return 1;
+        }
+
         // Step 0: Check database privileges BEFORE asking for tenant details
         $privilegedUser = null;
         $currentUser = $this->getCurrentDatabaseUser();
@@ -637,6 +642,148 @@ class CreateTenantCommand extends Command
         }
         
         return null;
+    }
+
+    private function checkSystemPrivileges(): bool
+    {
+        $this->info('🔍 Checking system privileges...');
+        
+        // Get current system user
+        $currentSystemUser = $this->getCurrentSystemUser();
+        
+        // Check if current user is root
+        if ($currentSystemUser === 'root') {
+            $this->info("✅ Running as root user - full system privileges available");
+            return true;
+        }
+        
+        // Check if current user has sudo privileges
+        if ($this->hasSudoPrivileges()) {
+            $this->info("✅ User '{$currentSystemUser}' has sudo privileges");
+            return true;
+        }
+        
+        // Check if we can identify users with sudo privileges
+        $sudoUsers = $this->getSudoUsers();
+        
+        $this->error("❌ Current user '{$currentSystemUser}' does not have sufficient system privileges!");
+        $this->newLine();
+        
+        $this->warn('⚠️  This command requires system privileges to:');
+        $this->line('   • Create databases and users');
+        $this->line('   • Configure FastPanel (if used)');
+        $this->line('   • Manage system resources');
+        $this->newLine();
+        
+        if (!empty($sudoUsers)) {
+            $this->comment('💡 Users with sudo privileges found:');
+            foreach ($sudoUsers as $user) {
+                $this->line("   • {$user}");
+            }
+            $this->newLine();
+            
+            // Suggest switching to a privileged user
+            $recommendedUser = $sudoUsers[0]; // First user from the list
+            $this->comment('📋 To run this command with proper privileges:');
+            $this->line("   su {$recommendedUser}");
+            $this->line("   # Or using sudo:");
+            $this->line("   sudo -u {$recommendedUser} php artisan tenant:create");
+        } else {
+            $this->comment('💡 No sudo users detected. Common privileged users:');
+            $this->line('   • root');
+            $this->line('   • xuser (if configured with sudo)');
+            $this->line('   • fastuser (if configured with sudo)');
+            $this->newLine();
+            $this->comment('📋 To run this command:');
+            $this->line('   su root');
+            $this->line('   # Or if you have a user with sudo:');
+            $this->line('   su xuser');
+        }
+        
+        $this->newLine();
+        $this->comment('🔧 To grant sudo privileges to current user:');
+        $this->line("   echo '{$currentSystemUser} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-{$currentSystemUser}");
+        
+        return false;
+    }
+    
+    private function getCurrentSystemUser(): string
+    {
+        // Try multiple methods to get current user
+        $user = posix_getpwuid(posix_geteuid());
+        if ($user && isset($user['name'])) {
+            return $user['name'];
+        }
+        
+        // Fallback to environment variables
+        return $_SERVER['USER'] ?? $_SERVER['USERNAME'] ?? get_current_user() ?? 'unknown';
+    }
+    
+    private function hasSudoPrivileges(): bool
+    {
+        try {
+            // Test if current user can run sudo commands
+            $result = shell_exec('sudo -n true 2>/dev/null; echo $?');
+            return trim($result) === '0';
+        } catch (Exception $e) {
+            return false;
+        }
+    }
+    
+    private function getSudoUsers(): array
+    {
+        $sudoUsers = [];
+        
+        try {
+            // Check /etc/sudoers.d/ directory for user-specific sudo files
+            if (is_dir('/etc/sudoers.d')) {
+                $sudoFiles = glob('/etc/sudoers.d/*');
+                foreach ($sudoFiles as $file) {
+                    if (is_file($file) && is_readable($file)) {
+                        $filename = basename($file);
+                        // Common pattern: /etc/sudoers.d/90-username
+                        if (preg_match('/^\d*-?(.+)$/', $filename, $matches)) {
+                            $potentialUser = $matches[1];
+                            if ($this->isValidSystemUser($potentialUser)) {
+                                $sudoUsers[] = $potentialUser;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Also check for common privileged users
+            $commonUsers = ['root', 'xuser', 'fastuser', 'admin', 'ubuntu'];
+            foreach ($commonUsers as $user) {
+                if ($this->isValidSystemUser($user) && !in_array($user, $sudoUsers)) {
+                    // Check if user is in sudo group
+                    $groups = shell_exec("groups {$user} 2>/dev/null");
+                    if ($groups && (strpos($groups, 'sudo') !== false || strpos($groups, 'wheel') !== false)) {
+                        $sudoUsers[] = $user;
+                    }
+                }
+            }
+            
+            // Remove duplicates and sort
+            $sudoUsers = array_unique($sudoUsers);
+            sort($sudoUsers);
+            
+        } catch (Exception $e) {
+            // If we can't determine sudo users, return common defaults
+            return ['root', 'xuser'];
+        }
+        
+        return $sudoUsers;
+    }
+    
+    private function isValidSystemUser(string $username): bool
+    {
+        try {
+            $user = posix_getpwnam($username);
+            return $user !== false;
+        } catch (Exception $e) {
+            return false;
+        }
     }
 
     private function checkFastPanelAvailability(): bool
