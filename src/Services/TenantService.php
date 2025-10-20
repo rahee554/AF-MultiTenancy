@@ -142,7 +142,7 @@ class TenantService
      * Clear all cache and session data related to a tenant
      * Prevents stale authentication data issues (403 Forbidden errors)
      */
-    private function clearTenantCacheAndSessions(Tenant $tenant): void
+    public function clearTenantCacheAndSessions(Tenant $tenant): void
     {
         try {
             $tenantId = $tenant->id;
@@ -191,14 +191,11 @@ class TenantService
                 }
             }
             
-            // 3. Clear tenant context cache
+            // 3. Clear cache facade
             try {
-                $cacheService = app(TenantContextCache::class);
-                foreach ($domains as $domain) {
-                    $cacheService->forget($domain->domain);
-                }
+                \Illuminate\Support\Facades\Cache::flush();
             } catch (\Exception $e) {
-                Log::warning("Tenant context cache clear failed: " . $e->getMessage());
+                Log::warning("Cache flush failed: " . $e->getMessage());
             }
             
         } catch (\Exception $e) {

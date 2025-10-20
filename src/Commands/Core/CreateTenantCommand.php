@@ -648,6 +648,12 @@ class CreateTenantCommand extends Command
     {
         $this->info('🔍 Checking system privileges...');
         
+        // On Windows, system privilege checks don't apply (no sudo/root concept)
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $this->info("✅ Running on Windows - skipping Unix-style privilege checks");
+            return true;
+        }
+        
         // Get current system user
         $currentSystemUser = $this->getCurrentSystemUser();
         
@@ -710,12 +716,15 @@ class CreateTenantCommand extends Command
     private function getCurrentSystemUser(): string
     {
         // Try multiple methods to get current user
-        $user = posix_getpwuid(posix_geteuid());
-        if ($user && isset($user['name'])) {
-            return $user['name'];
+        // Check if POSIX functions are available (Linux/Mac only)
+        if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
+            $user = posix_getpwuid(posix_geteuid());
+            if ($user && isset($user['name'])) {
+                return $user['name'];
+            }
         }
         
-        // Fallback to environment variables
+        // Fallback to environment variables (works on Windows and Unix)
         return $_SERVER['USER'] ?? $_SERVER['USERNAME'] ?? get_current_user() ?? 'unknown';
     }
     
@@ -779,8 +788,16 @@ class CreateTenantCommand extends Command
     private function isValidSystemUser(string $username): bool
     {
         try {
-            $user = posix_getpwnam($username);
-            return $user !== false;
+            // Check if POSIX functions are available (Linux/Mac only)
+            if (function_exists('posix_getpwnam')) {
+                $user = posix_getpwnam($username);
+                return $user !== false;
+            }
+            
+            // On Windows, we can't validate system users with posix functions
+            // So we return true if username looks reasonable (not empty and not system reserved)
+            $reservedNames = ['con', 'prn', 'aux', 'nul', 'com1', 'lpt1'];
+            return !empty($username) && !in_array(strtolower($username), $reservedNames);
         } catch (Exception $e) {
             return false;
         }
