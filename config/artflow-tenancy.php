@@ -297,4 +297,89 @@ return [
             'compress' => env('TENANT_AUTO_BACKUP_COMPRESS', true),
         ],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Tenant Directory Structure Configuration
+    |--------------------------------------------------------------------------
+    |
+    | Configure tenant directory structure for organizing all tenant-specific data.
+    |
+    | PUBLIC DIRECTORIES (web accessible via /storage/tenants/{domain}/)
+    | - assets/       General tenant assets (images, fonts, CSS, JS)
+    | - pwa/          PWA files (manifest.json, service-worker.js, icons)
+    | - seo/          SEO files (robots.txt, sitemap.xml)
+    | - documents/    Public documents
+    | - media/        Media files (videos, audio)
+    |
+    | PRIVATE DIRECTORIES (NOT web accessible, stored in storage/app/private/)
+    | - backups/      Database backups
+    | - logs/         Tenant-specific logs
+    | - cache/        Tenant cache
+    | - temp/         Temporary files
+    | - documents/    Private documents
+    | - uploads/      Private uploads
+    | - config/       Tenant-specific configuration
+    |
+    */
+    'directories' => [
+        // Public tenant directories (web accessible)
+        'public' => [
+            'base' => 'storage/app/public/tenants', // Base path for public tenant directories
+            'subdirs' => [
+                'assets',      // General assets
+                'pwa',         // PWA files
+                'seo',         // SEO files
+                'documents',   // Public documents
+                'media',       // Media files
+            ],
+            'pwa_subdirs' => ['icons'],           // Subdirectories inside pwa/
+            'seo_subdirs' => [],                  // SEO only stores files, no subdirs
+        ],
+
+        // Private tenant directories (NOT web accessible)
+        'private' => [
+            'base' => 'storage/app/private/tenants', // Base path for private tenant directories
+            'subdirs' => [
+                'backups',     // Database backups
+                'logs',        // Tenant logs
+                'cache',       // Tenant cache
+                'temp',        // Temporary files
+                'documents',   // Private documents
+                'uploads',     // Private uploads
+                'config',      // Tenant configuration
+            ],
+        ],
+
+        // Directory access configuration
+        'access' => [
+            'public_mode' => 0755,   // Permissions for public directories
+            'private_mode' => 0700,  // Permissions for private directories
+            'file_mode' => 0644,     // Permissions for files
+        ],
+
+        // Automatic directory creation
+        'auto_create' => [
+            'on_tenant_create' => env('TENANT_AUTO_CREATE_DIRS', true),
+            'on_seo_enable' => env('TENANT_AUTO_CREATE_DIRS_SEO', true),
+            'on_pwa_enable' => env('TENANT_AUTO_CREATE_DIRS_PWA', true),
+        ],
+
+        // Directory size limits (in MB, 0 = unlimited)
+        'size_limits' => [
+            'total' => env('TENANT_DIR_SIZE_LIMIT', 0),
+            'public' => env('TENANT_PUBLIC_DIR_LIMIT', 0),
+            'private' => env('TENANT_PRIVATE_DIR_LIMIT', 0),
+            'backups' => env('TENANT_BACKUPS_SIZE_LIMIT', 500), // 500 MB for backups
+        ],
+
+        // Backup configuration
+        'backups' => [
+            'enabled' => env('TENANT_BACKUPS_ENABLED', true),
+            'path' => 'private/tenants/{domain}/backups',
+            'retention_days' => env('TENANT_BACKUP_RETENTION_DAYS', 30),
+            'retention_count' => env('TENANT_BACKUP_RETENTION_COUNT', 10),
+            'auto_compress' => env('TENANT_BACKUP_AUTO_COMPRESS', true),
+        ],
+    ],
 ];

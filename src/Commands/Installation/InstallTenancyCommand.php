@@ -3,8 +3,8 @@
 namespace ArtflowStudio\Tenancy\Commands\Installation;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 
 class InstallTenancyCommand extends Command
 {
@@ -37,7 +37,7 @@ class InstallTenancyCommand extends Command
         $this->updateMiddlewareConfig();
 
         // Step 7: Create sample tenant (optional)
-        if (!$this->option('minimal')) {
+        if (! $this->option('minimal')) {
             $this->createSampleTenant();
         }
 
@@ -57,15 +57,15 @@ class InstallTenancyCommand extends Command
         Artisan::call('vendor:publish', [
             '--provider' => 'ArtflowStudio\Tenancy\TenancyServiceProvider',
             '--tag' => 'af-tenancy-config',
-            '--force' => $force
+            '--force' => $force,
         ]);
 
         // Publish stancl/tenancy config if not exists
-        if (!File::exists(config_path('tenancy.php')) || $force) {
+        if (! File::exists(config_path('tenancy.php')) || $force) {
             Artisan::call('vendor:publish', [
                 '--provider' => 'Stancl\Tenancy\TenancyServiceProvider',
                 '--tag' => 'tenancy-config',
-                '--force' => $force
+                '--force' => $force,
             ]);
         }
 
@@ -77,14 +77,14 @@ class InstallTenancyCommand extends Command
         $this->info('🔧 Ensuring stancl/tenancy is properly configured...');
 
         // Check if stancl/tenancy is installed
-        if (!class_exists('\Stancl\Tenancy\TenancyServiceProvider')) {
+        if (! class_exists('\Stancl\Tenancy\TenancyServiceProvider')) {
             $this->error('stancl/tenancy is not installed. Please install it first:');
             $this->line('composer require stancl/tenancy');
             exit(1);
         }
 
         // Install stancl/tenancy if not already done
-        if (!File::exists(config_path('tenancy.php'))) {
+        if (! File::exists(config_path('tenancy.php'))) {
             Artisan::call('tenancy:install');
             $this->line('   ✓ stancl/tenancy installed');
         } else {
@@ -114,28 +114,30 @@ class InstallTenancyCommand extends Command
     protected function addTenantTemplateToDatabase()
     {
         $databaseConfigPath = config_path('database.php');
-        
-        if (!File::exists($databaseConfigPath)) {
+
+        if (! File::exists($databaseConfigPath)) {
             $this->warn('   ⚠️  database.php not found, skipping tenant template addition');
+
             return;
         }
 
         $databaseConfig = File::get($databaseConfigPath);
 
         // Enhanced check for tenant_template - check for both quoted and unquoted versions
-        if (str_contains($databaseConfig, "'tenant_template'") || 
+        if (str_contains($databaseConfig, "'tenant_template'") ||
             str_contains($databaseConfig, '"tenant_template"') ||
             str_contains($databaseConfig, 'tenant_template')) {
             $this->line('   ✓ tenant_template connection already exists in database.php');
+
             return;
         }
 
         // Find the mysql connection configuration
         $mysqlPattern = "/('mysql'\s*=>\s*\[[\s\S]*?\],)/";
-        
+
         if (preg_match($mysqlPattern, $databaseConfig, $matches)) {
             $mysqlConfig = $matches[1];
-            
+
             // Create tenant template configuration
             $tenantTemplateConfig = "
         'tenant_template' => [
@@ -168,11 +170,11 @@ class InstallTenancyCommand extends Command
         ";
 
             // Insert tenant template before mysql configuration
-            $updatedConfig = str_replace($mysqlConfig, $tenantTemplateConfig . $mysqlConfig, $databaseConfig);
-            
+            $updatedConfig = str_replace($mysqlConfig, $tenantTemplateConfig.$mysqlConfig, $databaseConfig);
+
             // Write the updated configuration back
             File::put($databaseConfigPath, $updatedConfig);
-            
+
             $this->line('   ✅ Added tenant_template connection to database.php');
         } else {
             $this->warn('   ⚠️  Could not find mysql connection in database.php - please add tenant_template manually');
@@ -187,7 +189,7 @@ class InstallTenancyCommand extends Command
 
         $providerClass = 'ArtflowStudio\\Tenancy\\TenancyServiceProvider::class';
 
-        if (!str_contains($appConfig, $providerClass)) {
+        if (! str_contains($appConfig, $providerClass)) {
             $this->warn('⚠️  Please manually add the service provider to config/app.php:');
             $this->line("   {$providerClass}");
         } else {
@@ -198,7 +200,7 @@ class InstallTenancyCommand extends Command
     protected function updateCacheConfig()
     {
         $cacheConfigPath = config_path('cache.php');
-        
+
         if (File::exists($cacheConfigPath)) {
             $this->line('   ℹ️  Consider configuring Redis with tenant prefixes in cache.php');
         }
@@ -207,7 +209,7 @@ class InstallTenancyCommand extends Command
     protected function updateSessionConfig()
     {
         $sessionConfigPath = config_path('session.php');
-        
+
         if (File::exists($sessionConfigPath)) {
             $this->line('   ℹ️  Session configuration detected - tenant scoping will be handled by middleware');
         }
@@ -222,15 +224,153 @@ class InstallTenancyCommand extends Command
             'app/Http/Middleware/Tenant',
             'database/migrations/tenant',
             'resources/views/tenant',
+            'resources/views/tenants/default', // Default homepage folder
             'storage/app/tenants',
+            'storage/app/public/tenants', // Main tenant assets directory
         ];
 
         foreach ($directories as $dir) {
             $path = base_path($dir);
-            if (!File::exists($path)) {
+            if (! File::exists($path)) {
                 File::makeDirectory($path, 0755, true);
                 $this->line("   ✓ Created {$dir}");
             }
+        }
+
+        // Create default home.blade.php
+        $this->createDefaultHomepage();
+
+        // Create README files for tenant directories
+        $this->createTenantDirectoryReadmes();
+    }
+
+    protected function createDefaultHomepage()
+    {
+        $defaultHomePath = resource_path('views/tenants/default/home.blade.php');
+
+        if (! File::exists($defaultHomePath)) {
+            $content = <<<'BLADE'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - Default Tenant</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            text-align: center;
+            color: white;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+        }
+        .info {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 Default Tenant Homepage</h1>
+        <p>This is the default homepage template for all tenants.</p>
+        <div class="info">
+            <p>Create custom homepage folders in <strong>resources/views/tenants/</strong></p>
+            <p>Use exact domain naming: <strong>tenant1.local</strong></p>
+        </div>
+    </div>
+</body>
+</html>
+BLADE;
+
+            File::put($defaultHomePath, $content);
+            $this->line('   ✓ Created default home.blade.php');
+        }
+    }
+
+    protected function createTenantDirectoryReadmes()
+    {
+        // Create README in storage/app/public/tenants
+        $tenantsReadmePath = storage_path('app/public/tenants/README.md');
+
+        if (! File::exists($tenantsReadmePath)) {
+            $content = <<<'MARKDOWN'
+# Tenant Assets Directory
+
+This directory contains all tenant-specific assets organized by exact domain name.
+
+## Structure
+
+```
+tenants/
+├── tenant1.local/
+│   ├── assets/      # General assets (images, fonts, etc.)
+│   ├── pwa/         # PWA files (manifest, icons, service worker)
+│   ├── seo/         # SEO files (robots.txt, sitemap.xml)
+│   ├── documents/   # Documents and downloads
+│   └── media/       # Media files (videos, audio)
+├── tenant2.local/
+│   └── ...
+└── subdomain.example.com/
+    └── ...
+```
+
+## Important Notes
+
+- **Exact Domain Names**: Folder names use the exact domain (e.g., `tenant1.local`, not `tenant1_local`)
+- **Automatic Creation**: Folders are created automatically when SEO is enabled or assets are uploaded
+- **Public Access**: These folders are accessible via `/storage/tenants/{domain}/{subfolder}/`
+
+## Helper Functions
+
+**Standard Tenant Functions:**
+- `tenant_asset('images/logo.png')` - ⚠️ Routes through /tenancy/assets/ (stancl/tenancy default)
+- `tenant_pwa_asset('manifest.json')` - Generate URL for PWA assets
+- `tenant_seo_asset('robots.txt')` - Generate URL for SEO assets
+- `tenant_path('assets')` - Get absolute storage path
+
+**Artflow Custom Functions (Recommended - Direct /storage/ URLs):**
+- `af_tenant_asset('images/logo.png')` - Generate URL for tenant assets → /storage/tenants/{domain}/assets/
+- `af_tenant_pwa_asset('manifest.json')` - Generate URL for PWA assets → /storage/tenants/{domain}/pwa/
+- `af_tenant_seo_asset('robots.txt')` - Generate URL for SEO assets → /storage/tenants/{domain}/seo/
+
+**Why use af_tenant_asset()?**
+The artflow custom functions (with `af_` prefix) generate direct storage URLs without routing through the `/tenancy/assets/` route,
+which means:
+- ✅ Faster asset loading (direct symlink access)
+- ✅ Better for static files, images, CSS, JS
+- ✅ Works with Laravel's storage symlink
+- ✅ No route processing overhead
+
+## Commands
+
+- `php artisan tenant:seo:enable --tenant=uuid` - Enable SEO (creates folder structure)
+- `php artisan tenant:seo:status --all` - Check tenant SEO status
+- `php artisan tenant:assets:upload` - Upload tenant-specific assets
+
+For more information, see the package documentation.
+MARKDOWN;
+
+            File::put($tenantsReadmePath, $content);
+            $this->line('   ✓ Created tenant directory README');
         }
     }
 
@@ -258,7 +398,7 @@ class InstallTenancyCommand extends Command
         $this->info('🛡️ Updating middleware configuration...');
 
         $httpKernelPath = app_path('Http/Kernel.php');
-        
+
         if (File::exists($httpKernelPath)) {
             $this->line('   ✓ Middleware groups are automatically registered by service provider');
             $this->line('   ℹ️  Available middleware groups:');
@@ -272,7 +412,7 @@ class InstallTenancyCommand extends Command
     {
         if ($this->confirm('Create a sample tenant for testing?', false)) {
             $domain = $this->ask('Enter tenant domain (e.g., tenant1.yourapp.com)', 'tenant1.localhost');
-            
+
             try {
                 Artisan::call('tenant:create', [
                     'domain' => $domain,
@@ -280,7 +420,7 @@ class InstallTenancyCommand extends Command
                 ]);
                 $this->info("   ✅ Sample tenant created: {$domain}");
             } catch (\Exception $e) {
-                $this->error("   ❌ Failed to create sample tenant: " . $e->getMessage());
+                $this->error('   ❌ Failed to create sample tenant: '.$e->getMessage());
             }
         }
     }

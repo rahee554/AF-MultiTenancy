@@ -21,6 +21,11 @@ class CachePerformanceTestCommand extends Command
     public function handle(): int
     {
         $this->displayHeader();
+        
+        // Check if cache driver supports tenancy operations
+        if (!$this->checkCacheCompatibility()) {
+            return 1;
+        }
 
         $tenants = Tenant::take($this->option('tenants'))->get();
 
@@ -49,10 +54,15 @@ class CachePerformanceTestCommand extends Command
         $this->testCacheDeletes($tenants);
         $this->newLine();
 
-        // Test 5: Cache Isolation Test
-        $this->info('🔍 Test 5: Cache Isolation Between Tenants');
-        $this->testCacheIsolation($tenants);
-        $this->newLine();
+        // Test 5: Cache Isolation Test (only if tags supported)
+        if ($this->cacheSupportsTagging()) {
+            $this->info('🔍 Test 5: Cache Isolation Between Tenants');
+            $this->testCacheIsolation($tenants);
+            $this->newLine();
+        } else {
+            $this->warn('⚠️  Test 5: Cache Isolation - SKIPPED (driver doesn\'t support tags)');
+            $this->newLine();
+        }
 
         // Test 6: Cache Prefix Test
         $this->info('🔍 Test 6: Cache Key Prefix Validation');
@@ -62,6 +72,51 @@ class CachePerformanceTestCommand extends Command
         $this->displayResults();
 
         return 0;
+    }
+    
+    /**
+     * Check if cache driver is compatible with tenancy
+     */
+    private function checkCacheCompatibility(): bool
+    {
+        $driver = config('cache.default');
+        
+        // Check if cache supports tagging
+        if (!$this->cacheSupportsTagging()) {
+            $this->warn('⚠️  WARNING: Cache driver "' . $driver . '" does not support tagging.');
+            $this->warn('⚠️  Some tenancy features require Redis or Memcached for full functionality.');
+            $this->newLine();
+            
+            if (!$this->confirm('Continue with limited cache tests?', true)) {
+                $this->info('Test cancelled. Consider switching to Redis cache.');
+                $this->comment('💡 Run: php artisan tenancy:cache-setup redis --isolation=tags');
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Check if current cache driver supports tagging
+     */
+    private function cacheSupportsTagging(): bool
+    {
+        try {
+            $store = Cache::getStore();
+            
+            // Check if store has supportsTags method (Redis, Memcached)
+            if (method_exists($store, 'supportsTags')) {
+                return $store->supportsTags();
+            }
+            
+            // Check store type directly
+            $driver = config('cache.default');
+            return in_array($driver, ['redis', 'memcached']);
+            
+        } catch (\Exception $e) {
+            return false;
+        }
     }
 
     private function displayHeader(): void
@@ -85,26 +140,36 @@ class CachePerformanceTestCommand extends Command
         $operations = $this->option('operations');
         $times = [];
         $failedWrites = 0;
+        $supportsTagging = $this->cacheSupportsTagging();
 
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
+            // Only initialize tenancy if cache supports tags
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
+            }
             
             $start = microtime(true);
             
             for ($i = 0; $i < $operations; $i++) {
                 try {
-                    $key = "test_write_{$i}";
+                    $key = "test_write_{$tenant->id}_{$i}"; // Include tenant ID in key when not using tags
                     $value = $this->generateValue();
                     Cache::put($key, $value, 3600);
                 } catch (Exception $e) {
                     $failedWrites++;
+                    // Log the first error for debugging
+                    if ($failedWrites === 1) {
+                        $this->warn("   ⚠️  Cache write error: " . $e->getMessage());
+                    }
                 }
             }
             
             $duration = (microtime(true) - $start) * 1000;
             $times[] = $duration;
             
-            tenancy()->end();
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         $totalTime = array_sum($times);
@@ -135,24 +200,35 @@ class CachePerformanceTestCommand extends Command
         $times = [];
         $hits = 0;
         $misses = 0;
+        $supportsTagging = $this->cacheSupportsTagging();
 
         // First, populate cache
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
-            for ($i = 0; $i < $operations; $i++) {
-                Cache::put("test_read_{$i}", $this->generateValue(), 3600);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
             }
-            tenancy()->end();
+            
+            for ($i = 0; $i < $operations; $i++) {
+                $key = "test_read_{$tenant->id}_{$i}";
+                Cache::put($key, $this->generateValue(), 3600);
+            }
+            
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         // Now test reads
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
+            }
             
             $start = microtime(true);
             
             for ($i = 0; $i < $operations; $i++) {
-                $value = Cache::get("test_read_{$i}");
+                $key = "test_read_{$tenant->id}_{$i}";
+                $value = Cache::get($key);
                 if ($value !== null) {
                     $hits++;
                 } else {
@@ -163,7 +239,9 @@ class CachePerformanceTestCommand extends Command
             $duration = (microtime(true) - $start) * 1000;
             $times[] = $duration;
             
-            tenancy()->end();
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         $totalTime = array_sum($times);
@@ -190,20 +268,26 @@ class CachePerformanceTestCommand extends Command
     {
         $operations = $this->option('operations');
         $times = [];
+        $supportsTagging = $this->cacheSupportsTagging();
 
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
+            }
             
             $start = microtime(true);
             
             for ($i = 0; $i < $operations; $i++) {
-                Cache::get("nonexistent_key_{$i}");
+                $key = $supportsTagging ? "nonexistent_key_{$i}" : "nonexistent_key_{$tenant->id}_{$i}";
+                Cache::get($key);
             }
             
             $duration = (microtime(true) - $start) * 1000;
             $times[] = $duration;
             
-            tenancy()->end();
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         $totalTime = array_sum($times);
@@ -226,30 +310,43 @@ class CachePerformanceTestCommand extends Command
     {
         $operations = $this->option('operations');
         $times = [];
+        $supportsTagging = $this->cacheSupportsTagging();
 
         // First, populate cache
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
-            for ($i = 0; $i < $operations; $i++) {
-                Cache::put("test_delete_{$i}", $this->generateValue(), 3600);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
             }
-            tenancy()->end();
+            
+            for ($i = 0; $i < $operations; $i++) {
+                $key = $supportsTagging ? "test_delete_{$i}" : "test_delete_{$tenant->id}_{$i}";
+                Cache::put($key, $this->generateValue(), 3600);
+            }
+            
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         // Now test deletes
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
+            }
             
             $start = microtime(true);
             
             for ($i = 0; $i < $operations; $i++) {
-                Cache::forget("test_delete_{$i}");
+                $key = $supportsTagging ? "test_delete_{$i}" : "test_delete_{$tenant->id}_{$i}";
+                Cache::forget($key);
             }
             
             $duration = (microtime(true) - $start) * 1000;
             $times[] = $duration;
             
-            tenancy()->end();
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         $totalTime = array_sum($times);
@@ -316,11 +413,15 @@ class CachePerformanceTestCommand extends Command
     {
         $testKey = 'prefix_test_key';
         $prefixesFound = [];
+        $supportsTagging = $this->cacheSupportsTagging();
 
         foreach ($tenants as $tenant) {
-            tenancy()->initialize($tenant);
+            if ($supportsTagging) {
+                tenancy()->initialize($tenant);
+            }
             
-            Cache::put($testKey, 'test_value', 3600);
+            $key = $supportsTagging ? $testKey : "{$testKey}_{$tenant->id}";
+            Cache::put($key, 'test_value', 3600);
             
             // Try to inspect the actual cache key (driver-dependent)
             $cacheStore = Cache::getStore();
@@ -328,7 +429,9 @@ class CachePerformanceTestCommand extends Command
             
             $prefixesFound[$tenant->id] = $prefix;
             
-            tenancy()->end();
+            if ($supportsTagging) {
+                tenancy()->end();
+            }
         }
 
         $uniquePrefixes = count(array_unique($prefixesFound));

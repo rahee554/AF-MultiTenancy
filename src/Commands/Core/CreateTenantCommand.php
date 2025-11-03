@@ -91,6 +91,13 @@ class CreateTenantCommand extends Command
         }
         
         $hasHomepage = $this->option('homepage') || $this->confirm('🏠 Does this tenant have a homepage?', false);
+        
+        // Handle homepage folder validation
+        $homepageFolder = null;
+        if ($hasHomepage) {
+            $homepageFolder = $this->handleHomepageSelection($domain);
+        }
+        
         $status = $this->option('status') ?: 'active';
         $notes = $this->option('notes') ?: $this->ask('📝 Tenant notes (optional)', '');
 
@@ -104,9 +111,129 @@ class CreateTenantCommand extends Command
             'domain' => $domain,
             'database' => $customDb,
             'homepage' => $hasHomepage,
+            'homepage_folder' => $homepageFolder,
             'status' => $status,
             'notes' => $notes
         ];
+    }
+
+    private function handleHomepageSelection(string $domain): string
+    {
+        // Check if domain-based folder exists
+        $domainFolder = $this->getDomainFolderName($domain);
+        $homepagePath = resource_path("views/tenants/{$domainFolder}");
+        $homeBladeFile = "{$homepagePath}/home.blade.php";
+        
+        $this->newLine();
+        
+        if (file_exists($homepagePath) && is_dir($homepagePath)) {
+            // Check if home.blade.php exists inside the folder
+            if (file_exists($homeBladeFile)) {
+                $this->info("✅ Found existing homepage folder: views/tenants/{$domainFolder}");
+                $this->line("   📄 Contains: home.blade.php");
+                
+                $choice = $this->choice(
+                    '🔧 What would you like to do?',
+                    [
+                        'use_existing' => '♻️  Use existing homepage folder',
+                        'create_new' => '🆕 Create new homepage folder (will rename existing)',
+                        'cancel' => '❌ Cancel homepage creation'
+                    ],
+                    'use_existing'
+                );
+                
+                if ($choice === 'use_existing') {
+                    $this->info("   ✅ Using existing homepage folder: {$domainFolder}");
+                    return $domainFolder;
+                } elseif ($choice === 'cancel') {
+                    $this->warn('   ⚠️  Skipping homepage creation');
+                    return 'default'; // Use default folder
+                }
+                // If create_new, continue to create new folder with timestamp
+            } else {
+                // Folder exists but no home.blade.php
+                $this->warn("⚠️  Folder 'views/tenants/{$domainFolder}' exists but missing home.blade.php");
+                
+                if ($this->confirm('Would you like to create home.blade.php in existing folder?', true)) {
+                    $this->createHomeBladefile($homeBladeFile, $domain);
+                    $this->info("   ✅ Created home.blade.php in existing folder");
+                    return $domainFolder;
+                }
+            }
+        }
+        
+        // Create new folder
+        $finalFolder = $domainFolder;
+        
+        // If folder exists but user chose create_new, add timestamp
+        if (file_exists($homepagePath)) {
+            $finalFolder = $domainFolder . '_' . time();
+            $this->info("   📁 Creating new folder: views/tenants/{$finalFolder}");
+        } else {
+            $this->info("   📁 Creating homepage folder: views/tenants/{$finalFolder}");
+        }
+        
+        return $finalFolder;
+    }
+
+    private function getDomainFolderName(string $domain): string
+    {
+        // Use exact domain name as folder name
+        // tenancy1.local -> tenancy1.local
+        // subdomain.example.com -> subdomain.example.com
+        return strtolower($domain);
+    }
+
+    private function createHomeBladefile(string $filePath, string $domain): void
+    {
+        $content = <<<'BLADE'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - {{DOMAIN}}</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            text-align: center;
+            color: white;
+            padding: 2rem;
+        }
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        p {
+            font-size: 1.25rem;
+            opacity: 0.9;
+        }
+        .domain {
+            font-weight: bold;
+            color: #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 Welcome to Your Homepage</h1>
+        <p>Domain: <span class="domain">{{DOMAIN}}</span></p>
+        <p>Tenant homepage is ready!</p>
+    </div>
+</body>
+</html>
+BLADE;
+
+        file_put_contents($filePath, str_replace('{{DOMAIN}}', $domain, $content));
     }
 
     private function selectCreationMode(): string
@@ -210,7 +337,8 @@ class CreateTenantCommand extends Command
             }
             
             // Step 10: Complete setup
-            $this->completeTenantSetup($tenant, $dbDetails);
+            $homepageFolder = $tenantData['homepage_folder'] ?? null;
+            $this->completeTenantSetup($tenant, $dbDetails, $homepageFolder);
 
             $this->displayFastPanelSuccessMessage($tenant, $dbDetails, $selectedPanelUser, $siteId);
             return 0;
@@ -263,7 +391,8 @@ class CreateTenantCommand extends Command
             }
             
             // Step 5: Complete setup
-            $this->completeTenantSetup($tenant, $dbDetails);
+            $homepageFolder = $tenantData['homepage_folder'] ?? null;
+            $this->completeTenantSetup($tenant, $dbDetails, $homepageFolder);
 
             $this->displayLocalhostSuccessMessage($tenant, $dbDetails);
             return 0;
@@ -1459,7 +1588,7 @@ class CreateTenantCommand extends Command
         );
     }
 
-    private function completeTenantSetup(Tenant $tenant, array $dbDetails): void
+    private function completeTenantSetup(Tenant $tenant, array $dbDetails, ?string $homepageFolder = null): void
     {
         $this->info('🔄 Setting up tenant...');
 
@@ -1474,6 +1603,11 @@ class CreateTenantCommand extends Command
         
         if (!empty($updateData)) {
             $tenant->update($updateData);
+        }
+
+        // Create homepage folder and file if needed
+        if ($homepageFolder && $homepageFolder !== 'default') {
+            $this->createHomepageStructure($homepageFolder, $tenant->domains()->first()->domain ?? 'tenant');
         }
 
         // Run migrations if requested
@@ -1505,6 +1639,26 @@ class CreateTenantCommand extends Command
                 $this->comment('💡 You can run seeders later with: php artisan tenant:db seed --tenant=' . $tenant->id);
             }
         }
+    }
+
+    private function createHomepageStructure(string $folder, string $domain): void
+    {
+        $homepagePath = resource_path("views/tenants/{$folder}");
+        $homeBladeFile = "{$homepagePath}/home.blade.php";
+        
+        // Create directory if it doesn't exist
+        if (!file_exists($homepagePath)) {
+            mkdir($homepagePath, 0755, true);
+            $this->info("   📁 Created homepage directory: views/tenants/{$folder}");
+        }
+        
+        // Create home.blade.php if it doesn't exist
+        if (!file_exists($homeBladeFile)) {
+            $this->createHomeBladefile($homeBladeFile, $domain);
+            $this->info("   📄 Created home.blade.php file");
+        }
+        
+        $this->info("   ✅ Homepage structure ready at: resources/views/tenants/{$folder}");
     }
 
     private function displayFastPanelSuccessMessage(Tenant $tenant, array $dbDetails, array $panelUser, ?int $siteId): void

@@ -27,6 +27,10 @@ class Tenant extends BaseTenant implements TenantWithDatabase
         'has_homepage',
         'last_accessed_at',
         'settings',
+        'pwa_enabled',
+        'pwa_config',
+        'seo_enabled',
+        'seo_config',
     ];
 
     /**
@@ -35,7 +39,11 @@ class Tenant extends BaseTenant implements TenantWithDatabase
     protected $casts = [
         'data' => 'array',
         'settings' => 'array',
+        'pwa_config' => 'array',
+        'seo_config' => 'array',
         'has_homepage' => 'boolean',
+        'pwa_enabled' => 'boolean',
+        'seo_enabled' => 'boolean',
         'last_accessed_at' => 'datetime',
     ];
 
@@ -51,6 +59,10 @@ class Tenant extends BaseTenant implements TenantWithDatabase
             'has_homepage',
             'last_accessed_at',
             'settings',
+            'pwa_enabled',
+            'pwa_config',
+            'seo_enabled',
+            'seo_config',
         ]);
     }
 
@@ -112,6 +124,60 @@ class Tenant extends BaseTenant implements TenantWithDatabase
         // Optionally remove homepage view directory when disabling
         // Note: We don't auto-remove to preserve custom content
         // User can manually delete if needed
+    }
+
+    /**
+     * Check if tenant has PWA enabled
+     */
+    public function hasPWA(): bool
+    {
+        return $this->pwa_enabled === true;
+    }
+
+    /**
+     * Enable PWA for tenant
+     */
+    public function enablePWA(array $config = []): void
+    {
+        $this->update([
+            'pwa_enabled' => true,
+            'pwa_config' => $config
+        ]);
+    }
+
+    /**
+     * Disable PWA for tenant
+     */
+    public function disablePWA(): void
+    {
+        $this->update(['pwa_enabled' => false]);
+    }
+
+    /**
+     * Check if tenant has SEO enabled
+     */
+    public function hasSEO(): bool
+    {
+        return $this->seo_enabled === true;
+    }
+
+    /**
+     * Enable SEO for tenant
+     */
+    public function enableSEO(array $config = []): void
+    {
+        $this->update([
+            'seo_enabled' => true,
+            'seo_config' => $config
+        ]);
+    }
+
+    /**
+     * Disable SEO for tenant
+     */
+    public function disableSEO(): void
+    {
+        $this->update(['seo_enabled' => false]);
     }
 
     /**

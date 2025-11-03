@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      * Creates tenants and domains tables compatible with stancl/tenancy
@@ -23,6 +22,10 @@ return new class extends Migration
             $table->string('database')->unique()->nullable(); //
             $table->enum('status', ['active', 'inactive', 'blocked'])->default('active');
             $table->boolean('has_homepage')->default(false);
+
+            $table->boolean('pwa_enabled')->default(false);
+            $table->json('pwa_config')->nullable();
+
             $table->timestamp('last_accessed_at')->nullable();
             $table->json('settings')->nullable();
 
