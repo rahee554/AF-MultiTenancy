@@ -26,6 +26,9 @@ return new class extends Migration {
             $table->boolean('pwa_enabled')->default(false);
             $table->json('pwa_config')->nullable();
 
+            $table->boolean('seo_enabled')->default(false);
+            $table->json('seo_config')->nullable();
+
             $table->timestamp('last_accessed_at')->nullable();
             $table->json('settings')->nullable();
 

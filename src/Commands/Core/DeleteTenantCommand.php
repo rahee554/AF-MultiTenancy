@@ -26,7 +26,7 @@ class DeleteTenantCommand extends Command
         }
 
         $tenant = $this->findTenant();
-        if (! $tenant) {
+        if (!$tenant) {
             return 1;
         }
 
@@ -37,12 +37,12 @@ class DeleteTenantCommand extends Command
         $keepDbRequested = (bool) $this->option('keep-db');
         $deleteDbRequested = !$keepDbRequested; // Delete DB by default unless --keep-db is passed
 
-        if (! $this->option('force')) {
+        if (!$this->option('force')) {
             $prompt = $deleteDbRequested
                 ? 'Delete this tenant and its database? This action is irreversible.'
                 : 'Delete this tenant record only? The tenant database will be preserved. This action is irreversible.';
 
-            if (! $this->confirm($prompt, false)) {
+            if (!$this->confirm($prompt, false)) {
                 $this->info('Deletion cancelled.');
                 return 0;
             }
@@ -77,10 +77,10 @@ class DeleteTenantCommand extends Command
                     $deleted = $this->runFastPanelDeleteDatabase($dbName);
                     if ($deleted) {
                         $this->info('✅ FastPanel: database deleted');
-                        
+
                         // Sync FastPanel metadata after deletion
                         $this->syncFastPanelAfterDeletion();
-                        
+
                         // Check and potentially delete MySQL user
                         if ($dbUser) {
                             $this->handleMySQLUserCleanup($dbUser);
@@ -88,7 +88,7 @@ class DeleteTenantCommand extends Command
                     } else {
                         $this->warn('FastPanel deletion returned non-success; falling back to local deletion');
                         $this->dropDatabaseLocal($dbName);
-                        
+
                         // Still check for user cleanup after local deletion
                         if ($dbUser) {
                             $this->handleMySQLUserCleanup($dbUser);
@@ -100,7 +100,7 @@ class DeleteTenantCommand extends Command
                     try {
                         if ($dbName) {
                             $this->dropDatabaseLocal($dbName);
-                            
+
                             // Check for user cleanup after local deletion
                             if ($dbUser) {
                                 $this->handleMySQLUserCleanup($dbUser);
@@ -116,7 +116,7 @@ class DeleteTenantCommand extends Command
                     try {
                         $this->info("Dropping local database '{$dbName}'...");
                         $this->dropDatabaseLocal($dbName);
-                        
+
                         // Check for user cleanup after local deletion
                         if ($dbUser) {
                             $this->handleMySQLUserCleanup($dbUser);
@@ -158,11 +158,11 @@ class DeleteTenantCommand extends Command
     private function clearTenantCacheAndSessions(Tenant $tenant): void
     {
         $this->info('🧹 Clearing tenant cache and sessions...');
-        
+
         try {
             $tenantId = $tenant->id;
             $domains = $tenant->domains;
-            
+
             // 1. Clear tenant-specific cache
             if (config('cache.default') === 'redis') {
                 try {
@@ -187,7 +187,7 @@ class DeleteTenantCommand extends Command
                     $this->warn("   ⚠ Database cache clear failed: " . $e->getMessage());
                 }
             }
-            
+
             // 2. Clear sessions related to this tenant
             try {
                 // Clear database sessions if using database driver
@@ -199,7 +199,7 @@ class DeleteTenantCommand extends Command
                     if ($deleted > 0) {
                         $this->line("   ✓ Cleared {$deleted} tenant session(s)");
                     }
-                    
+
                     // Also clear sessions by domain if we have domains
                     foreach ($domains as $domain) {
                         $deletedByDomain = DB::table(config('session.table', 'sessions'))
@@ -210,7 +210,7 @@ class DeleteTenantCommand extends Command
                         }
                     }
                 }
-                
+
                 // Clear file sessions if using file driver
                 if (config('session.driver') === 'file') {
                     $sessionPath = storage_path('framework/sessions');
@@ -234,7 +234,7 @@ class DeleteTenantCommand extends Command
             } catch (Exception $e) {
                 $this->warn("   ⚠ Session clear failed: " . $e->getMessage());
             }
-            
+
             // 3. Clear Laravel application cache
             try {
                 \Illuminate\Support\Facades\Artisan::call('cache:clear');
@@ -242,7 +242,7 @@ class DeleteTenantCommand extends Command
             } catch (Exception $e) {
                 $this->warn("   ⚠ Application cache clear failed: " . $e->getMessage());
             }
-            
+
             // 4. Clear tenant context cache
             try {
                 $cacheService = app(\ArtflowStudio\Tenancy\Services\TenantContextCache::class);
@@ -253,9 +253,9 @@ class DeleteTenantCommand extends Command
             } catch (Exception $e) {
                 $this->warn("   ⚠ Tenant context cache clear failed: " . $e->getMessage());
             }
-            
+
             $this->info('✅ Cache and session cleanup completed');
-            
+
         } catch (Exception $e) {
             $this->warn("⚠ Overall cache/session cleanup encountered errors: " . $e->getMessage());
             $this->line("   This may cause stale session issues. Users should clear their browser cookies.");
@@ -271,7 +271,7 @@ class DeleteTenantCommand extends Command
                 ->orWhereHas('domains', function ($q) use ($given) {
                     $q->where('domain', $given);
                 })->first();
-            if (! $tenant) {
+            if (!$tenant) {
                 $this->error('Tenant not found: ' . $given);
             }
             return $tenant;
@@ -294,7 +294,7 @@ class DeleteTenantCommand extends Command
     private function checkFastPanelAvailability(): bool
     {
         try {
-            if (! file_exists('/usr/local/fastpanel2/fastpanel')) {
+            if (!file_exists('/usr/local/fastpanel2/fastpanel')) {
                 return false;
             }
             $result = Process::run('sudo /usr/local/fastpanel2/fastpanel users list --help 2>/dev/null');
@@ -316,17 +316,17 @@ class DeleteTenantCommand extends Command
         // Since FastPanel CLI might not support direct database deletion,
         // we'll delete the MySQL database directly and then sync FastPanel
         $this->info("Deleting database '{$dbName}' from MySQL and syncing with FastPanel...");
-        
+
         try {
             // Delete the database from MySQL first
             $this->dropDatabaseLocal($dbName);
             $this->info("✅ Database '{$dbName}' deleted from MySQL");
-            
+
             // Sync FastPanel to update its metadata
             $syncResult = Process::run('sudo /usr/local/fastpanel2/fastpanel databases sync --json');
             if ($syncResult->successful()) {
                 $this->info("✅ FastPanel metadata synced");
-                
+
                 // Verify deletion by checking if database still exists in FastPanel
                 $stillExists = $this->checkFastPanelDatabaseExists($dbName);
                 if (!$stillExists) {
@@ -340,7 +340,7 @@ class DeleteTenantCommand extends Command
                 $this->warn("FastPanel sync failed: " . $syncResult->output());
                 return false;
             }
-            
+
         } catch (Exception $e) {
             $this->warn("Database deletion failed: " . $e->getMessage());
             return false;
@@ -372,7 +372,7 @@ class DeleteTenantCommand extends Command
     {
         try {
             $this->info("🔍 Checking FastPanel database status for: {$dbName}");
-            
+
             $result = Process::run('sudo /usr/local/fastpanel2/fastpanel databases list --json');
             if ($result->successful()) {
                 $databases = json_decode($result->output(), true);
@@ -434,7 +434,7 @@ class DeleteTenantCommand extends Command
         try {
             // Try to get database user info from MySQL grants
             $grants = DB::select("SELECT DISTINCT grantee FROM information_schema.schema_privileges WHERE table_schema = ?", [$dbName]);
-            
+
             if (!empty($grants)) {
                 $grantee = $grants[0]->grantee;
                 // Parse grantee format: 'username'@'host'
@@ -447,7 +447,7 @@ class DeleteTenantCommand extends Command
                     ];
                 }
             }
-            
+
             return null;
         } catch (Exception $e) {
             return null;
@@ -458,15 +458,15 @@ class DeleteTenantCommand extends Command
     {
         try {
             $this->info('🔄 Syncing FastPanel metadata after deletion...');
-            
+
             // First sync the databases
             $result = Process::run('sudo /usr/local/fastpanel2/fastpanel databases sync --json');
             if ($result->successful()) {
                 $this->info('✅ FastPanel database metadata synced');
-                
+
                 // Wait a moment for sync to complete
                 sleep(1);
-                
+
                 // List current FastPanel databases to verify deletion
                 $this->listFastPanelDatabases();
             } else {
@@ -481,16 +481,16 @@ class DeleteTenantCommand extends Command
     {
         try {
             $this->info('📊 Current FastPanel databases:');
-            
+
             $result = Process::run('sudo /usr/local/fastpanel2/fastpanel databases list --json');
             if ($result->successful()) {
                 $output = $result->output();
                 $databases = json_decode($output, true);
-                
+
                 if (is_array($databases) && !empty($databases)) {
                     $this->table(
                         ['ID', 'Name', 'Server', 'User', 'Created'],
-                        array_map(function($db) {
+                        array_map(function ($db) {
                             return [
                                 $db['id'] ?? 'N/A',
                                 $db['name'] ?? 'N/A',
@@ -516,13 +516,13 @@ class DeleteTenantCommand extends Command
         try {
             $username = $dbUser['username'];
             $host = $dbUser['host'];
-            
+
             // Check if user has any other databases
             $otherDatabases = $this->getUserOtherDatabases($username, $host);
-            
+
             if (empty($otherDatabases)) {
                 $this->info("🗑️  MySQL user '{$username}@{$host}' has no remaining databases.");
-                
+
                 if ($this->confirm("Delete MySQL user '{$username}@{$host}'?", false)) {
                     $this->deleteMySQLUser($username, $host);
                     $this->info("✅ MySQL user '{$username}@{$host}' deleted");
@@ -542,7 +542,7 @@ class DeleteTenantCommand extends Command
         try {
             $grantee = "'{$username}'@'{$host}'";
             $databases = DB::select("SELECT DISTINCT table_schema FROM information_schema.schema_privileges WHERE grantee = ? AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')", [$grantee]);
-            
+
             return array_column($databases, 'table_schema');
         } catch (Exception $e) {
             return [];
@@ -581,34 +581,34 @@ class DeleteTenantCommand extends Command
     private function checkSystemPrivileges(): bool
     {
         $this->info('🔍 Checking system privileges...');
-        
+
         // Get current system user
         $currentSystemUser = $this->getCurrentSystemUser();
-        
+
         // Check if current user is root
         if ($currentSystemUser === 'root') {
             $this->info("✅ Running as root user");
             return true;
         }
-        
+
         // Check if current user has sudo privileges
         if ($this->hasSudoPrivileges()) {
             $this->info("✅ User '{$currentSystemUser}' has sudo privileges");
             return true;
         }
-        
+
         // Check if we can identify users with sudo privileges
         $sudoUsers = $this->getSudoUsers();
-        
+
         $this->error("❌ Current user '{$currentSystemUser}' does not have sufficient system privileges!");
         $this->newLine();
-        
+
         $this->warn('⚠️  This command requires system privileges to:');
         $this->line('   • Delete databases and users');
         $this->line('   • Configure FastPanel (if used)');
         $this->line('   • Manage system resources');
         $this->newLine();
-        
+
         if (!empty($sudoUsers)) {
             $this->comment('💡 Available options:');
             $this->line("   1. Switch to a privileged user:");
@@ -628,14 +628,14 @@ class DeleteTenantCommand extends Command
             $this->comment('💡 Or run as privileged user:');
             $this->line("   sudo -u ubuntu php artisan tenant:delete");
         }
-        
+
         $this->newLine();
         $this->comment('🔧 To grant sudo privileges to current user:');
         $this->line("   echo '{$currentSystemUser} ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/90-{$currentSystemUser}");
-        
+
         return false;
     }
-    
+
     private function getCurrentSystemUser(): string
     {
         // Try multiple methods to get current user
@@ -643,11 +643,11 @@ class DeleteTenantCommand extends Command
         if ($user && isset($user['name'])) {
             return $user['name'];
         }
-        
+
         // Fallback to environment variables
         return $_SERVER['USER'] ?? $_SERVER['USERNAME'] ?? get_current_user() ?? 'unknown';
     }
-    
+
     private function hasSudoPrivileges(): bool
     {
         try {
@@ -657,18 +657,19 @@ class DeleteTenantCommand extends Command
             return false;
         }
     }
-    
+
     private function getSudoUsers(): array
     {
         $sudoUsers = [];
-        
+
         try {
             // Check /etc/sudoers.d/ directory for user configurations
             if (is_dir('/etc/sudoers.d/')) {
                 $files = scandir('/etc/sudoers.d/');
                 foreach ($files as $file) {
-                    if ($file === '.' || $file === '..') continue;
-                    
+                    if ($file === '.' || $file === '..')
+                        continue;
+
                     $filePath = "/etc/sudoers.d/{$file}";
                     if (is_file($filePath) && is_readable($filePath)) {
                         $content = file_get_contents($filePath);
@@ -681,7 +682,7 @@ class DeleteTenantCommand extends Command
                     }
                 }
             }
-            
+
             // Add common privileged users if they exist
             $commonUsers = ['ubuntu', 'admin', 'root', 'www-data'];
             foreach ($commonUsers as $user) {
@@ -689,22 +690,22 @@ class DeleteTenantCommand extends Command
                     $sudoUsers[] = $user;
                 }
             }
-            
+
             // Remove duplicates and current user if present
             $sudoUsers = array_unique($sudoUsers);
             $currentUser = $this->getCurrentSystemUser();
-            $sudoUsers = array_filter($sudoUsers, function($user) use ($currentUser) {
+            $sudoUsers = array_filter($sudoUsers, function ($user) use ($currentUser) {
                 return $user !== $currentUser;
             });
-            
+
         } catch (Exception $e) {
             // Return common fallback users
             return ['ubuntu', 'root'];
         }
-        
+
         return $sudoUsers;
     }
-    
+
     private function isValidSystemUser(string $username): bool
     {
         try {

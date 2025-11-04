@@ -9,17 +9,9 @@ use Stancl\Tenancy\Middleware\InitializeTenancyByDomain;
 use Stancl\Tenancy\Contracts\TenantCouldNotBeIdentifiedException;
 use Stancl\Tenancy\Tenancy;
 use Stancl\Tenancy\Resolvers\DomainTenantResolver;
+use ArtflowStudio\Tenancy\Livewire\TenancyBootstrapperHook; // Add this import
 use Illuminate\Support\Facades\Log;
 
-/**
- * Tenant Authentication Middleware
- * 
- * Universal authentication middleware that:
- * 1. Works on both central and tenant domains
- * 2. Initializes tenant context when available
- * 3. Falls back to central behavior when tenant not found
- * 4. Provides proper tenant identification for auth routes
- */
 class TenantAuthMiddleware
 {
     protected $tenancyMiddleware;
@@ -40,7 +32,7 @@ class TenantAuthMiddleware
     {
         $domain = $request->getHost();
         $centralDomains = config('artflow-tenancy.central_domains', []);
-        
+
         // Check if this is a central domain
         if (in_array($domain, $centralDomains)) {
             // Central domain - no tenant initialization needed
@@ -48,11 +40,10 @@ class TenantAuthMiddleware
                 'domain' => $domain,
                 'path' => $request->path()
             ]);
-            
-            // Add central context to request
+
             $request->attributes->set('is_central', true);
             $request->attributes->set('tenant', null);
-            
+
             return $next($request);
         }
 
@@ -62,7 +53,7 @@ class TenantAuthMiddleware
                 'domain' => $domain,
                 'path' => $request->path()
             ]);
-            
+
             return $this->tenancyMiddleware->handle($request, function ($req) use ($next, $domain) {
                 $tenant = tenant();
                 
@@ -73,32 +64,34 @@ class TenantAuthMiddleware
                         'domain' => $domain,
                         'path' => $req->path()
                     ]);
-                    
+
+                    // Optionally bootstrap additional tenancy setup
+                    TenancyBootstrapperHook::bootstrap(); // <-- Add this line here
+
                     // Add tenant context to request
                     $req->attributes->set('is_central', false);
                     $req->attributes->set('tenant', $tenant);
-                    
+
                     // Share tenant data with views for auth pages
                     view()->share('currentTenant', $tenant);
                     view()->share('tenantDomain', $domain);
                 }
-                
+
                 return $next($req);
             });
             
         } catch (TenantCouldNotBeIdentifiedException $e) {
-            // Tenant not found - could be a new domain or misconfiguration
-            Log::warning('TenantAuthMiddleware: Tenant not found, continuing without tenant context', [
+            // Tenant not found - log and continue without tenant context
+            Log::warning('TenantAuthMiddleware: Tenant not found', [
                 'domain' => $domain,
                 'path' => $request->path(),
                 'error' => $e->getMessage()
             ]);
-            
-            // Continue without tenant context - treat as central for auth
+
             $request->attributes->set('is_central', true);
             $request->attributes->set('tenant', null);
             $request->attributes->set('tenant_lookup_failed', true);
-            
+
             return $next($request);
             
         } catch (\Exception $e) {
@@ -109,12 +102,11 @@ class TenantAuthMiddleware
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            
-            // Fallback to central behavior
+
             $request->attributes->set('is_central', true);
             $request->attributes->set('tenant', null);
             $request->attributes->set('initialization_error', true);
-            
+
             return $next($request);
         }
     }
@@ -126,20 +118,5 @@ class TenantAuthMiddleware
     {
         $centralDomains = config('artflow-tenancy.central_domains', []);
         return in_array($domain, $centralDomains);
-    }
-
-    /**
-     * Get tenant information for logging
-     */
-    protected function getTenantInfo($tenant): array
-    {
-        if (!$tenant) {
-            return ['tenant_id' => null, 'tenant_name' => null];
-        }
-
-        return [
-            'tenant_id' => $tenant->id,
-            'tenant_name' => $tenant->name ?? 'Unknown'
-        ];
     }
 }

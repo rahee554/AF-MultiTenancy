@@ -11,9 +11,10 @@ class TenantDirectoriesCommand extends Command
     protected $signature = 'tenant:directories 
                           {--check : Only check directory status}
                           {--create : Create missing directories}
+                          {--delete : Delete tenant directories}
                           {--domain= : Specific domain to manage}
                           {--all : Process all tenants}
-                          {--force : Force create even if exists}';
+                          {--force : Force delete without confirmation}';
 
     protected $description = 'Check and create tenant directory structures (public & private)';
 
@@ -50,6 +51,11 @@ class TenantDirectoriesCommand extends Command
     {
         $this->info('🏢 Tenant Directories Manager');
         $this->line('─────────────────────────────────────────');
+
+        // Determine which operation to perform
+        if ($this->option('delete')) {
+            return $this->handleDelete();
+        }
 
         // Determine which tenants to process
         $tenants = $this->getTenantsList();
@@ -153,6 +159,134 @@ class TenantDirectoriesCommand extends Command
         if ($this->option('create') || $this->option('force')) {
             $this->createTenantDirectories($domain);
         }
+    }
+
+    /**
+     * Handle deletion of tenant directories
+     */
+    protected function handleDelete(): int
+    {
+        $domain = $this->option('domain');
+
+        if ($domain) {
+            // Delete specific domain directories
+            return $this->deleteTenantByDomain($domain) ? Command::SUCCESS : Command::FAILURE;
+        }
+
+        // Interactive mode - list all tenants for deletion
+        $tenants = Tenant::with('domains')->get();
+
+        if ($tenants->isEmpty()) {
+            $this->error('❌ No tenants found!');
+
+            return Command::FAILURE;
+        }
+
+        $this->line("\n🗑️  Tenant Directory Deletion");
+        $this->line('Available tenants:');
+        $this->newLine();
+
+        $choices = [];
+        foreach ($tenants as $index => $tenant) {
+            $domain = $tenant->domains->first()->domain ?? 'unknown';
+            $this->line("  [{$index}] {$domain} (ID: {$tenant->id})");
+            $choices[$index] = ['tenant' => $tenant, 'domain' => $domain];
+        }
+
+        $this->newLine();
+        $selected = $this->ask('Select tenant(s) to DELETE (comma-separated indices or "all" for all)');
+
+        if (strtolower($selected) === 'all') {
+            if (! $this->option('force') && ! $this->confirm('⚠️  DELETE ALL TENANT DIRECTORIES? This cannot be undone!', false)) {
+                $this->info('Deletion cancelled.');
+
+                return Command::SUCCESS;
+            }
+
+            foreach ($choices as $choice) {
+                $this->deleteTenantDirectories($choice['domain']);
+            }
+
+            $this->info('✅ All tenant directories deleted!');
+
+            return Command::SUCCESS;
+        }
+
+        $indices = array_map('trim', explode(',', $selected));
+        $deleted = 0;
+
+        foreach ($indices as $index) {
+            if (isset($choices[$index])) {
+                $choice = $choices[$index];
+
+                if (! $this->option('force') && ! $this->confirm("Delete directories for {$choice['domain']}?", false)) {
+                    $this->line("Skipped: {$choice['domain']}");
+
+                    continue;
+                }
+
+                if ($this->deleteTenantDirectories($choice['domain'])) {
+                    $deleted++;
+                }
+            }
+        }
+
+        $this->info("✅ Deleted {$deleted} tenant directory set(s)!");
+
+        return Command::SUCCESS;
+    }
+
+    /**
+     * Delete tenant directories by domain name
+     */
+    protected function deleteTenantByDomain(string $domain): bool
+    {
+        $domainModel = \Stancl\Tenancy\Database\Models\Domain::where('domain', $domain)->first();
+
+        if (! $domainModel) {
+            $this->error("❌ Domain not found: {$domain}");
+
+            return false;
+        }
+
+        if (! $this->option('force') && ! $this->confirm("Delete all directories for domain '{$domain}'?", false)) {
+            $this->info('Deletion cancelled.');
+
+            return true;
+        }
+
+        return $this->deleteTenantDirectories($domain);
+    }
+
+    /**
+     * Delete all directories for a tenant
+     */
+    protected function deleteTenantDirectories(string $domain): bool
+    {
+        $publicPath = storage_path("app/public/tenants/{$domain}");
+        $privatePath = storage_path("app/private/tenants/{$domain}");
+
+        $deleted = false;
+
+        if (File::isDirectory($publicPath)) {
+            File::deleteDirectory($publicPath);
+            $this->line("  ✓ Deleted public directory: <fg=red>{$publicPath}</>");
+            $deleted = true;
+        }
+
+        if (File::isDirectory($privatePath)) {
+            File::deleteDirectory($privatePath);
+            $this->line("  ✓ Deleted private directory: <fg=red>{$privatePath}</>");
+            $deleted = true;
+        }
+
+        if (! $deleted) {
+            $this->line("  ℹ️  No directories found to delete for: {$domain}");
+        } else {
+            $this->info("✅ Deleted all directories for: <fg=cyan>{$domain}</>");
+        }
+
+        return true;
     }
 
     /**

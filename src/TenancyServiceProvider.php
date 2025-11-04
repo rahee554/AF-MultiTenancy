@@ -18,6 +18,12 @@ class TenancyServiceProvider extends ServiceProvider
         // Load helper functions
         require_once __DIR__.'/helpers.php';
 
+        // Register tenant lifecycle events
+        $this->registerTenantEvents();
+
+        // Register stancl/tenancy event listeners
+        $this->bootStanclTenancyEvents();
+
         $this->loadRoutesFrom(__DIR__.'/../routes/af-admin.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/af-tenancy.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/af-admin-api.php');
@@ -228,6 +234,9 @@ class TenancyServiceProvider extends ServiceProvider
 
         // Register our event service provider
         $this->app->register(Providers\EventServiceProvider::class);
+
+        // Ensure tenancy middleware has highest priority (from App\Providers\TenancyServiceProvider)
+        $this->makeTenancyMiddlewareHighestPriority();
     }
 
     /**
@@ -260,6 +269,27 @@ class TenancyServiceProvider extends ServiceProvider
             \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLSchemaManager::class,
             \Stancl\Tenancy\TenantDatabaseManagers\PostgreSQLSchemaManager::class
         );
+    }
+
+    /**
+     * Make tenancy middleware highest priority (formerly in App\Providers\TenancyServiceProvider)
+     */
+    protected function makeTenancyMiddlewareHighestPriority(): void
+    {
+        $tenancyMiddleware = [
+            // Even higher priority than the initialization middleware
+            \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
+
+            \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
+            \Stancl\Tenancy\Middleware\InitializeTenancyBySubdomain::class,
+            \Stancl\Tenancy\Middleware\InitializeTenancyByDomainOrSubdomain::class,
+            \Stancl\Tenancy\Middleware\InitializeTenancyByPath::class,
+            \Stancl\Tenancy\Middleware\InitializeTenancyByRequestData::class,
+        ];
+
+        foreach (array_reverse($tenancyMiddleware) as $middleware) {
+            $this->app[\Illuminate\Contracts\Http\Kernel::class]->prependToMiddlewarePriority($middleware);
+        }
     }
 
     /**
@@ -364,8 +394,28 @@ class TenancyServiceProvider extends ServiceProvider
                 // Livewire middleware for tenancy
                 Livewire::addPersistentMiddleware([
                     \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
-                    \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
+                    // Removed: PreventAccessFromCentralDomains - it causes issues with universal routes
+                    // \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
                 ]);
+
+                // CRITICAL: Bootstrap tenancy for Livewire component method calls
+                // Using Livewire's lifecycle hooks to ensure tenancy is initialized
+                // before component methods are executed
+                \Livewire\on('mount', function ($component, $params, $key, $parent) {
+                    \ArtflowStudio\Tenancy\Livewire\TenancyBootstrapperHook::bootstrap();
+                });
+
+                // CRITICAL: Bootstrap tenancy for AJAX calls (call event)
+                // This ensures _livewire/update requests also have tenancy initialized
+                \Livewire\on('call', function ($component, $method, $params, $addEffect, $earlyReturn) {
+                    \ArtflowStudio\Tenancy\Livewire\TenancyBootstrapperHook::bootstrap();
+                });
+
+                // CRITICAL: Bootstrap tenancy for hydration
+                // This ensures tenancy is initialized when component state is hydrated
+                \Livewire\on('hydrate', function ($component, $memo) {
+                    \ArtflowStudio\Tenancy\Livewire\TenancyBootstrapperHook::bootstrap();
+                });
             });
         }
     }
@@ -416,6 +466,179 @@ class TenancyServiceProvider extends ServiceProvider
                 'cache.prefix' => config('artflow-tenancy.redis.central_prefix', 'central_'),
             ]);
         });
+    }
+
+    /**
+     * Register tenant lifecycle events (formerly in App\Providers\AppServiceProvider)
+     */
+    private function registerTenantEvents(): void
+    {
+        $tenantModel = \ArtflowStudio\Tenancy\Models\Tenant::class;
+
+        // When a tenant is created, ensure directories are created
+        \Illuminate\Support\Facades\Event::listen("eloquent.created: {$tenantModel}", function (\ArtflowStudio\Tenancy\Models\Tenant $tenant) {
+            $this->createTenantDirectories($tenant);
+        });
+
+        // When a tenant is deleted, clean up directories
+        \Illuminate\Support\Facades\Event::listen("eloquent.deleted: {$tenantModel}", function (\ArtflowStudio\Tenancy\Models\Tenant $tenant) {
+            $this->deleteTenantDirectories($tenant);
+        });
+    }
+
+    /**
+     * Create all necessary directories for a new tenant
+     */
+    private function createTenantDirectories(\ArtflowStudio\Tenancy\Models\Tenant $tenant): void
+    {
+        $domain = $tenant->domains?->first()?->domain ?? $tenant->id;
+
+        // Public directories
+        $publicSubdirs = [
+            'assets',      // General assets
+            'pwa',         // PWA files
+            'pwa/icons',   // PWA icons
+            'seo',         // SEO files
+            'documents',   // Downloadable documents
+            'media',       // Media files
+        ];
+
+        $publicPath = base_path("storage/app/public/tenants/{$domain}");
+
+        foreach ($publicSubdirs as $subdir) {
+            $path = "{$publicPath}/{$subdir}";
+            \Illuminate\Support\Facades\File::ensureDirectoryExists($path);
+            // Create .gitkeep to preserve empty directories in git
+            \Illuminate\Support\Facades\File::put("{$path}/.gitkeep", '');
+        }
+
+        // Private directories
+        $privateSubdirs = [
+            'backups',     // Database backups
+            'logs',        // Tenant-specific logs
+            'cache',       // Tenant cache
+            'temp',        // Temporary files
+            'documents',   // Private documents
+            'uploads',     // Private uploads
+            'config',      // Tenant-specific config
+        ];
+
+        $privatePath = base_path("storage/app/private/tenants/{$domain}");
+
+        foreach ($privateSubdirs as $subdir) {
+            $path = "{$privatePath}/{$subdir}";
+            \Illuminate\Support\Facades\File::ensureDirectoryExists($path);
+            \Illuminate\Support\Facades\File::put("{$path}/.gitkeep", '');
+        }
+    }
+
+    /**
+     * Delete all directories for a deleted tenant
+     */
+    private function deleteTenantDirectories(\ArtflowStudio\Tenancy\Models\Tenant $tenant): void
+    {
+        $domain = $tenant->domains?->first()?->domain ?? $tenant->id;
+
+        $publicPath = base_path("storage/app/public/tenants/{$domain}");
+        $privatePath = base_path("storage/app/private/tenants/{$domain}");
+
+        if (\Illuminate\Support\Facades\File::isDirectory($publicPath)) {
+            \Illuminate\Support\Facades\File::deleteDirectory($publicPath);
+        }
+
+        if (\Illuminate\Support\Facades\File::isDirectory($privatePath)) {
+            \Illuminate\Support\Facades\File::deleteDirectory($privatePath);
+        }
+    }
+
+    /**
+     * Boot stancl/tenancy events (formerly in App\Providers\TenancyServiceProvider)
+     */
+    private function bootStanclTenancyEvents(): void
+    {
+        $events = $this->getStanclTenancyEvents();
+
+        foreach ($events as $event => $listeners) {
+            foreach ($listeners as $listener) {
+                if ($listener instanceof \Stancl\JobPipeline\JobPipeline) {
+                    $listener = $listener->toListener();
+                }
+
+                \Illuminate\Support\Facades\Event::listen($event, $listener);
+            }
+        }
+    }
+
+    /**
+     * Get stancl/tenancy event mappings (formerly in App\Providers\TenancyServiceProvider::events())
+     */
+    private function getStanclTenancyEvents(): array
+    {
+        return [
+            // Tenant events
+            \Stancl\Tenancy\Events\CreatingTenant::class => [],
+            \Stancl\Tenancy\Events\TenantCreated::class => [
+                \Stancl\JobPipeline\JobPipeline::make([
+                    \Stancl\Tenancy\Jobs\CreateDatabase::class,
+                    \Stancl\Tenancy\Jobs\MigrateDatabase::class,
+                    // \Stancl\Tenancy\Jobs\SeedDatabase::class,
+                ])->send(function (\Stancl\Tenancy\Events\TenantCreated $event) {
+                    return $event->tenant;
+                })->shouldBeQueued(false),
+            ],
+            \Stancl\Tenancy\Events\SavingTenant::class => [],
+            \Stancl\Tenancy\Events\TenantSaved::class => [],
+            \Stancl\Tenancy\Events\UpdatingTenant::class => [],
+            \Stancl\Tenancy\Events\TenantUpdated::class => [],
+            \Stancl\Tenancy\Events\DeletingTenant::class => [],
+            \Stancl\Tenancy\Events\TenantDeleted::class => [
+                \Stancl\JobPipeline\JobPipeline::make([
+                    \Stancl\Tenancy\Jobs\DeleteDatabase::class,
+                ])->send(function (\Stancl\Tenancy\Events\TenantDeleted $event) {
+                    return $event->tenant;
+                })->shouldBeQueued(false),
+            ],
+
+            // Domain events
+            \Stancl\Tenancy\Events\CreatingDomain::class => [],
+            \Stancl\Tenancy\Events\DomainCreated::class => [],
+            \Stancl\Tenancy\Events\SavingDomain::class => [],
+            \Stancl\Tenancy\Events\DomainSaved::class => [],
+            \Stancl\Tenancy\Events\UpdatingDomain::class => [],
+            \Stancl\Tenancy\Events\DomainUpdated::class => [],
+            \Stancl\Tenancy\Events\DeletingDomain::class => [],
+            \Stancl\Tenancy\Events\DomainDeleted::class => [],
+
+            // Database events
+            \Stancl\Tenancy\Events\DatabaseCreated::class => [],
+            \Stancl\Tenancy\Events\DatabaseMigrated::class => [],
+            \Stancl\Tenancy\Events\DatabaseSeeded::class => [],
+            \Stancl\Tenancy\Events\DatabaseRolledBack::class => [],
+            \Stancl\Tenancy\Events\DatabaseDeleted::class => [],
+
+            // Tenancy events
+            \Stancl\Tenancy\Events\InitializingTenancy::class => [],
+            \Stancl\Tenancy\Events\TenancyInitialized::class => [
+                \Stancl\Tenancy\Listeners\BootstrapTenancy::class,
+            ],
+
+            \Stancl\Tenancy\Events\EndingTenancy::class => [],
+            \Stancl\Tenancy\Events\TenancyEnded::class => [
+                \Stancl\Tenancy\Listeners\RevertToCentralContext::class,
+            ],
+
+            \Stancl\Tenancy\Events\BootstrappingTenancy::class => [],
+            \Stancl\Tenancy\Events\TenancyBootstrapped::class => [],
+            \Stancl\Tenancy\Events\RevertingToCentralContext::class => [],
+            \Stancl\Tenancy\Events\RevertedToCentralContext::class => [],
+
+            // Resource syncing
+            \Stancl\Tenancy\Events\SyncedResourceSaved::class => [
+                \Stancl\Tenancy\Listeners\UpdateSyncedResource::class,
+            ],
+
+            \Stancl\Tenancy\Events\SyncedResourceChangedInForeignDatabase::class => [],
+        ];
     }
 
     /**
