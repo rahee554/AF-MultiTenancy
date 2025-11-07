@@ -24,6 +24,15 @@ class TenancyServiceProvider extends ServiceProvider
         // Register stancl/tenancy event listeners
         $this->bootStanclTenancyEvents();
 
+        // CRITICAL: Register global tenancy initialization middleware for 'web' middleware group.
+        // This must run BEFORE the session middleware to ensure that sessions are scoped
+        // correctly to the tenant's database. This is essential for both HTTP requests
+        // and Livewire AJAX requests (/livewire/update) which bypass route middleware.
+        // Uses prependMiddlewareToGroup to ensure highest priority in the 'web' group.
+        $kernel = $this->app->make(\Illuminate\Contracts\Http\Kernel::class);
+        $kernel->prependMiddlewareToGroup('web', \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class);
+
+
         $this->loadRoutesFrom(__DIR__.'/../routes/af-admin.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/af-tenancy.php');
         $this->loadRoutesFrom(__DIR__.'/../routes/af-admin-api.php');
@@ -316,6 +325,7 @@ class TenancyServiceProvider extends ServiceProvider
 
         // Universal middleware - works for both central and tenant domains
         $router->aliasMiddleware('universal.web', Http\Middleware\UniversalWebMiddleware::class);
+        $router->aliasMiddleware('universal', Http\Middleware\UniversalWebMiddleware::class);
 
         // Tenant maintenance middleware
         $router->aliasMiddleware('tenant.maintenance', Http\Middleware\TenantMaintenanceMiddleware::class);
@@ -327,8 +337,15 @@ class TenancyServiceProvider extends ServiceProvider
         // CRITICAL: Stale session detection (prevents 403 Forbidden after DB recreation)
         $router->aliasMiddleware('tenant.detect-stale', Http\Middleware\DetectStaleSessionMiddleware::class);
 
-        // MIDDLEWARE GROUPS - Simplified using official stancl/tenancy patterns
+        // Register middleware groups
+        $this->registerMiddlewareGroups($router);
+    }
 
+    /**
+     * Register middleware groups for central, tenant, and universal routes
+     */
+    protected function registerMiddlewareGroups(Router $router): void
+    {
         // ✨ UNIVERSAL: For routes that should work for BOTH central and tenant
         $router->middlewareGroup('universal.web', [
             'web',                                                    // Laravel web middleware (sessions, CSRF, etc.)
@@ -348,7 +365,6 @@ class TenancyServiceProvider extends ServiceProvider
             'tenant.prevent-central',     // Prevent access from central domains (stancl/tenancy)
             'tenant.scope-sessions',      // Scope sessions per tenant (stancl/tenancy) - CRITICAL for Livewire
             'tenant.detect-stale',        // CRITICAL: Detect stale sessions after DB recreation
-            // 'af-tenant',               // COMMENTED: Our enhancements - simplify by removing
         ]);
 
         // For TENANT API routes - OFFICIAL stancl/tenancy pattern
@@ -356,22 +372,14 @@ class TenancyServiceProvider extends ServiceProvider
             'api',                        // Laravel API middleware
             'tenant',                     // Initialize tenancy by domain
             'tenant.prevent-central',     // Prevent access from central domains
-            // 'tenant.api',              // COMMENTED: Our API enhancements - use official patterns
         ]);
 
-        // COMMENTED: Redundant middleware groups - use tenant.web instead
-        // $router->middlewareGroup('tenant.auth.web', [
-        //     'web',
-        //     'tenant',
-        //     'tenant.prevent-central',
-        //     'tenant.scope-sessions',
-        //     'tenant.auth',
-        // ]);
-
         // ✨ UNIVERSAL AUTH: For auth routes that should work for BOTH central and tenant
+        // CRITICAL: Tenancy initialization MUST run before session middleware
         $router->middlewareGroup('universal.auth', [
+            'tenant.auth',                // Initialize tenancy FIRST
             'web',                        // Laravel web middleware (sessions, CSRF, etc.)
-            'tenant.auth',                // Our universal auth middleware (handles both central and tenant)
+            'tenant.scope-sessions',      // Scope sessions per tenant for Livewire
         ]);
     }
 
@@ -396,6 +404,7 @@ class TenancyServiceProvider extends ServiceProvider
                     \Stancl\Tenancy\Middleware\InitializeTenancyByDomain::class,
                     // Removed: PreventAccessFromCentralDomains - it causes issues with universal routes
                     // \Stancl\Tenancy\Middleware\PreventAccessFromCentralDomains::class,
+                    // Removed: ScopeSessions - it needs to run with the full HTTP middleware chain for proper session handling
                 ]);
 
                 // CRITICAL: Bootstrap tenancy for Livewire component method calls
