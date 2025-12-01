@@ -14,6 +14,8 @@ class InstallTenancyCommand extends Command
 
     protected $description = 'Install ArtflowStudio Multi-Tenancy package';
 
+    private array $createdPaths = [];
+
     public function handle()
     {
         $this->info('🚀 Installing ArtflowStudio Multi-Tenancy Package...');
@@ -27,21 +29,22 @@ class InstallTenancyCommand extends Command
         // Step 3: Update application configuration
         $this->updateApplicationConfig();
 
-        // Step 4: Create directory structure
-        $this->createDirectoryStructure();
+        // Step 4: Create minimal required directory structure
+        $this->createMinimalDirectoryStructure();
 
-        // Step 5: Publish and run migrations
+        // Step 5: Create TenantDatabaseSeeder if needed
+        $this->createTenantDatabaseSeeder();
+
+        // Step 6: Publish and run migrations
         $this->handleMigrations();
 
-        // Step 6: Update middleware configuration
+        // Step 7: Update middleware configuration
         $this->updateMiddlewareConfig();
 
-        // Step 7: Create sample tenant (optional)
-        if (! $this->option('minimal')) {
-            $this->createSampleTenant();
-        }
+        // Step 8: Save installation state
+        $this->saveInstallationState();
 
-        // Step 8: Final instructions
+        // Step 9: Final instructions
         $this->displayCompletionInstructions();
 
         $this->info('✅ Installation completed successfully!');
@@ -53,23 +56,22 @@ class InstallTenancyCommand extends Command
 
         $force = $this->option('force');
 
-        // Publish our configurations
+        // Publish OUR configuration files (including our modified tenancy.php)
         Artisan::call('vendor:publish', [
             '--provider' => 'ArtflowStudio\Tenancy\TenancyServiceProvider',
             '--tag' => 'af-tenancy-config',
             '--force' => $force,
         ]);
 
-        // Publish stancl/tenancy config if not exists
-        if (! File::exists(config_path('tenancy.php')) || $force) {
-            Artisan::call('vendor:publish', [
-                '--provider' => 'Stancl\Tenancy\TenancyServiceProvider',
-                '--tag' => 'tenancy-config',
-                '--force' => $force,
-            ]);
-        }
+        // Publish our tenancy.php (NOT stancl's) as the primary config
+        Artisan::call('vendor:publish', [
+            '--provider' => 'ArtflowStudio\Tenancy\TenancyServiceProvider',
+            '--tag' => 'af-tenancy-tenancy-config',
+            '--force' => $force,
+        ]);
 
         $this->line('   ✓ Configuration files published');
+        $this->line('   ℹ️  Using ArtflowStudio tenancy configuration (not stancl/tenancy defaults)');
     }
 
     protected function ensureStanclTenancy()
@@ -184,17 +186,31 @@ class InstallTenancyCommand extends Command
 
     protected function updateProviders()
     {
-        $appConfigPath = config_path('app.php');
-        $appConfig = File::get($appConfigPath);
+        $bootstrapProvidersPath = bootstrap_path('providers.php');
 
-        $providerClass = 'ArtflowStudio\\Tenancy\\TenancyServiceProvider::class';
-
-        if (! str_contains($appConfig, $providerClass)) {
-            $this->warn('⚠️  Please manually add the service provider to config/app.php:');
-            $this->line("   {$providerClass}");
-        } else {
-            $this->line('   ✓ Service provider already registered');
+        if (! File::exists($bootstrapProvidersPath)) {
+            $this->warn('⚠️  bootstrap/providers.php not found');
+            return;
         }
+
+        $providersContent = File::get($bootstrapProvidersPath);
+        $providerClass = 'ArtflowStudio\Tenancy\TenancyServiceProvider::class';
+
+        if (str_contains($providersContent, $providerClass)) {
+            $this->line('   ✓ Service provider already registered in bootstrap/providers.php');
+            return;
+        }
+
+        // Add provider to the array
+        $updatedContent = str_replace(
+            "return [",
+            "return [\n    {$providerClass},",
+            $providersContent
+        );
+
+        File::put($bootstrapProvidersPath, $updatedContent);
+        $this->createdPaths[] = $bootstrapProvidersPath;
+        $this->line('   ✓ Service provider registered in bootstrap/providers.php');
     }
 
     protected function updateCacheConfig()
@@ -215,95 +231,66 @@ class InstallTenancyCommand extends Command
         }
     }
 
-    protected function createDirectoryStructure()
+    protected function createMinimalDirectoryStructure()
     {
-        $this->info('📁 Creating directory structure...');
+        $this->info('📁 Creating minimal required directory structure...');
 
+        // Only create essential tenant-specific directories
         $directories = [
-            'app/Models/Tenant',
-            'app/Http/Middleware/Tenant',
             'database/migrations/tenant',
-            'resources/views/tenant',
-            'resources/views/tenants/default', // Default homepage folder
             'storage/app/tenants',
-            'storage/app/public/tenants', // Main tenant assets directory
+            'storage/app/public/tenants',
         ];
 
         foreach ($directories as $dir) {
             $path = base_path($dir);
             if (! File::exists($path)) {
                 File::makeDirectory($path, 0755, true);
+                $this->createdPaths[] = $path;
                 $this->line("   ✓ Created {$dir}");
+            } else {
+                $this->line("   ℹ️  {$dir} already exists");
             }
         }
-
-        // Create default home.blade.php
-        $this->createDefaultHomepage();
 
         // Create README files for tenant directories
         $this->createTenantDirectoryReadmes();
     }
 
-    protected function createDefaultHomepage()
+    protected function createTenantDatabaseSeeder()
     {
-        $defaultHomePath = resource_path('views/tenants/default/home.blade.php');
+        $this->info('📝 Setting up database seeders...');
 
-        if (! File::exists($defaultHomePath)) {
-            $content = <<<'BLADE'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome - Default Tenant</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .container {
-            text-align: center;
-            color: white;
-            padding: 2rem;
-        }
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-        }
-        p {
-            font-size: 1.25rem;
-            opacity: 0.9;
-        }
-        .info {
-            margin-top: 2rem;
-            padding: 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 8px;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🏠 Default Tenant Homepage</h1>
-        <p>This is the default homepage template for all tenants.</p>
-        <div class="info">
-            <p>Create custom homepage folders in <strong>resources/views/tenants/</strong></p>
-            <p>Use exact domain naming: <strong>tenant1.local</strong></p>
-        </div>
-    </div>
-</body>
-</html>
-BLADE;
+        $tenantSeederPath = database_path('seeders/TenantDatabaseSeeder.php');
 
-            File::put($defaultHomePath, $content);
-            $this->line('   ✓ Created default home.blade.php');
+        if (File::exists($tenantSeederPath) && !$this->option('force')) {
+            $this->line('   ✓ TenantDatabaseSeeder.php already exists');
+            return;
         }
+
+        $seederContent = <<<'PHP'
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class TenantDatabaseSeeder extends Seeder
+{
+    /**
+     * Run the database seeds for tenants.
+     */
+    public function run(): void
+    {
+        // Add tenant-specific seeders here
+        // $this->call(TenantUsersSeeder::class);
+    }
+}
+PHP;
+
+        File::put($tenantSeederPath, $seederContent);
+        $this->createdPaths[] = $tenantSeederPath;
+        $this->line('   ✓ Created TenantDatabaseSeeder.php');
     }
 
     protected function createTenantDirectoryReadmes()
@@ -408,39 +395,42 @@ MARKDOWN;
         }
     }
 
-    protected function createSampleTenant()
+    protected function saveInstallationState()
     {
-        if ($this->confirm('Create a sample tenant for testing?', false)) {
-            $domain = $this->ask('Enter tenant domain (e.g., tenant1.yourapp.com)', 'tenant1.localhost');
+        $installationFile = storage_path('app/installation-state.json');
 
-            try {
-                Artisan::call('tenant:create', [
-                    'domain' => $domain,
-                    '--name' => 'Sample Tenant',
-                ]);
-                $this->info("   ✅ Sample tenant created: {$domain}");
-            } catch (\Exception $e) {
-                $this->error('   ❌ Failed to create sample tenant: '.$e->getMessage());
-            }
-        }
+        $state = [
+            'af-tenancy-installed' => true,
+            'installed-at' => now()->toIso8601String(),
+            'created-paths' => $this->createdPaths,
+            'version' => '0.8.0',
+        ];
+
+        File::put($installationFile, json_encode($state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        $this->line('   ✓ Installation state saved');
     }
 
     protected function displayCompletionInstructions()
     {
         $this->info('📋 Next Steps:');
         $this->line('');
-        $this->line('1. Update your route files to use appropriate middleware groups:');
+        $this->line('1. Run migrations (if not already done):');
+        $this->line('   php artisan migrate');
+        $this->line('   php artisan tenants:migrate');
+        $this->line('');
+        $this->line('2. Create your first tenant:');
+        $this->line('   php artisan tenant:create --domain=tenant1.localhost');
+        $this->line('');
+        $this->line('3. Configure your routes in routes/web.php:');
         $this->line('   - Use "central.web" for central domain routes');
         $this->line('   - Use "tenant.web" for tenant-specific routes');
         $this->line('   - Use "central.tenant.web" for shared routes');
         $this->line('');
-        $this->line('2. Configure your domains in config/artflow-tenancy.php');
+        $this->line('4. Configure domains in config/artflow-tenancy.php');
         $this->line('');
-        $this->line('3. Test the installation:');
-        $this->line('   php artisan tenancy:test');
-        $this->line('');
-        $this->line('4. View comprehensive test:');
-        $this->line('   php artisan tenancy:test:comprehensive');
+        $this->line('5. To uninstall and fix issues, run:');
+        $this->line('   php artisan af-tenancy:uninstall');
+        $this->line('   php artisan af-tenancy:install');
         $this->line('');
         $this->line('📚 Documentation: https://github.com/your-repo/af-multi-tenancy');
     }
