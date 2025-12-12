@@ -34,31 +34,46 @@ class TenantService
             $databaseName = $databaseName ?: ('tenant_' . str_replace('-', '', $tenantId));
             
             // Create the physical database first (outside transaction) unless skipped
+            // When skipDatabaseCreation is true, the database should already exist (created via FastPanel)
             if (!$skipDatabaseCreation) {
                 $this->createPhysicalDatabase($databaseName);
+            } else {
+                // Verify that the database exists when skipping creation
+                if (!$this->checkTenantDatabase($databaseName)) {
+                    throw new \Exception("Database '{$databaseName}' does not exist. Cannot create tenant without database.");
+                }
             }
             
             // Now create tenant record in central database transaction
             DB::beginTransaction();
             
-            // Create tenant record
-            $tenant = Tenant::create([
+            // Insert tenant record directly to bypass stancl/tenancy's database existence checks
+            // This is necessary when FastPanel creates the database externally
+            DB::table('tenants')->insert([
                 'id' => $tenantId,
-                'name' => $name,
-                'database' => $databaseName, // Store custom name if provided
-                'status' => $status,
-                'has_homepage' => $hasHomepage,
-                'data' => [
+                'data' => json_encode([
                     'notes' => $notes,
-                ],
+                ]),
+                'name' => $name,
+                'database' => $databaseName,
+                'status' => $status,
+                'has_homepage' => $hasHomepage ? 1 : 0,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             // Create domain
-            $tenant->domains()->create([
+            DB::table('domains')->insert([
                 'domain' => $domain,
+                'tenant_id' => $tenantId,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             DB::commit();
+            
+            // Retrieve the created tenant
+            $tenant = Tenant::findOrFail($tenantId);
             
             // Auto-create homepage view if enabled
             if ($hasHomepage && config('artflow-tenancy.homepage.auto_create_directory', true)) {
@@ -72,6 +87,7 @@ class TenantService
                 'domain' => $domain,
                 'database' => $databaseName,
                 'has_homepage' => $hasHomepage,
+                'skip_database_creation' => $skipDatabaseCreation,
             ]);
 
             return $tenant;
@@ -82,8 +98,8 @@ class TenantService
                 DB::rollBack();
             }
             
-            // Clean up database if it was created
-            if (isset($databaseName)) {
+            // Clean up database if it was created (only if we actually created it)
+            if (isset($databaseName) && !$skipDatabaseCreation) {
                 try {
                     $this->dropPhysicalDatabase($databaseName);
                 } catch (\Exception $cleanupError) {

@@ -165,7 +165,7 @@ class InstallTenancyCommand extends Command
                 PDO::MYSQL_ATTR_USE_BUFFERED_QUERY => false, // Reduce memory usage
                 PDO::ATTR_TIMEOUT => 10, // Shorter timeout for tenants
                 PDO::ATTR_STRINGIFY_FETCHES => false,
-                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION sql_mode=\'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION\', SESSION wait_timeout=120, SESSION interactive_timeout=120',
+                PDO::MYSQL_ATTR_INIT_COMMAND => 'SET SESSION sql_mode=\'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION\', SESSION wait_timeout=120, SESSION interactive_timeout=120',
             ]) : [],
         ],
 
